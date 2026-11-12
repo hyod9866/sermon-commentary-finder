@@ -1237,30 +1237,7 @@ class CommentaryView extends ItemView {
       updateFontSize(15);
     };
 
-    // PDF 버튼 (PC 전용: 아이패드 및 모바일에서는 불필요하므로 생성하지 않음)
-    const isMobileDevice = (this.app && this.app.isMobile) ||
-                           (typeof require !== 'function') ||
-                           (typeof navigator !== 'undefined' && /iPad|iPhone|Android/i.test(navigator.userAgent)) ||
-                           (document.body && (document.body.classList.contains('is-mobile') || document.body.classList.contains('is-tablet')));
-    if (!isMobileDevice) {
-      const pdfBtn = toolbar.createEl('button', {
-        cls: 'scf-mini-btn scf-pdf-btn',
-        text: '📄 PDF 원본',
-        title: `${fname} — ${p1}쪽을 Edge/외부 뷰어로 열기`
-      });
-      pdfBtn.onclick = async (evt) => {
-        if (evt) evt.stopPropagation();
-        pdfBtn.setText('⏳ PDF 여는 중...');
-        try {
-          await this.plugin.openPdf(file[0], file[1], p1);
-        } catch (err) {
-          new Notice('PDF 열기 오류: ' + err.message);
-        } finally {
-          setTimeout(() => pdfBtn.setText('📄 PDF 원본'), 2500);
-        }
-      };
-      pdfBtn.addEventListener('pointerdown', (evt) => evt.stopPropagation());
-    }
+    // PDF 버튼: PC/모바일 모두 제거 (사용자 요청: 의미가 없으므로 완전히 제외)
 
     // 편집 버튼
     const editBtn = toolbar.createEl('button', {

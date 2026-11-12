@@ -1698,12 +1698,8 @@ button.scf-list-item,
 }
 
 
-/* 모바일/아이패드에서 PC 전용 'PDF 원본' 버튼 완벽 숨김 */
-.is-mobile .scf-pdf-btn,
-.is-tablet .scf-pdf-btn,
-.is-phone .scf-pdf-btn,
-body.is-mobile .scf-pdf-btn,
-body.is-tablet .scf-pdf-btn {
+/* 사용자 요청: PDF 원본 버튼 PC/모바일 전체 영구 숨김 */
+.scf-pdf-btn {
   display: none !important;
 }
 
@@ -1728,13 +1724,7 @@ body.is-tablet .scf-pdf-btn {
   display: none !important;
 }
 
-.is-mobile .scf-pdf-btn,
-.is-tablet .scf-pdf-btn,
-.is-phone .scf-pdf-btn,
-body.is-mobile .scf-pdf-btn,
-body.is-tablet .scf-pdf-btn {
-  display: none !important;
-}
+
 
 .scf-reader-header {
   padding: 6px 12px !important;

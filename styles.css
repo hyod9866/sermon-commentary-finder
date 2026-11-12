@@ -1716,3 +1716,45 @@ body.is-tablet .scf-pdf-btn {
     display: none !important;
   }
 }
+
+
+/* 사용자 요청: 중복 헤더 행([호크마 종합주석] 장절 등), PDF 원본 버튼(모바일), 상태 배너 완전 숨김 */
+.scf-reader-title-row {
+  display: none !important;
+}
+
+.scf-reader-status-banner {
+  display: none !important;
+}
+
+.is-mobile .scf-pdf-btn,
+.is-tablet .scf-pdf-btn,
+.is-phone .scf-pdf-btn,
+body.is-mobile .scf-pdf-btn,
+body.is-tablet .scf-pdf-btn {
+  display: none !important;
+}
+
+.scf-reader-header {
+  padding: 6px 12px !important;
+  gap: 0 !important;
+}
+
+.scf-reader-toolbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+}
+
+/* 검색 입력창 배경 흰색(#ffffff) 강제 적용 */
+.scf-input,
+.scf-dict-search-input,
+.scf-head input[type="text"],
+.scf-dict-head input[type="text"],
+.scf-view input[type="text"],
+.scf-dict-view input[type="text"] {
+  background-color: #ffffff !important;
+  background: #ffffff !important;
+  color: #1e293b !important;
+}

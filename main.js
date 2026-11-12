@@ -597,6 +597,7 @@ class CommentaryView extends ItemView {
     const head = root.createDiv({ cls: 'scf-head' });
     const row = head.createDiv({ cls: 'scf-row' });
     this.inputEl = row.createEl('input', { type: 'text', cls: 'scf-input', placeholder: '장절 입력 (예: 요 3:16, 룻 2장, 골 3:5)' });
+    this.inputEl.style.cssText = 'background-color: #ffffff !important; background: #ffffff !important; color: #1e293b !important; border: 1.5px solid var(--background-modifier-border, #cbd5e1) !important; border-radius: 6px !important;';
     this.inputEl.setAttribute('enterkeyhint', 'search');
     this.inputEl.addEventListener('focus', () => {
       if (this.plugin) this.plugin._manualSearchLockUntil = Date.now() + 30000;
@@ -1139,17 +1140,8 @@ class CommentaryView extends ItemView {
     let currentText = isCorrected ? unwrapCommentary(correctedCandidate) : rawOcrText;
     let isShowingOriginal = !isCorrected;
 
-    // 2. 리더 상단 헤더
+    // 2. 리더 상단 헤더 (사용자 요청: 중복 타이틀 행 '[호크마 종합주석] 시 138:7' 삭제하여 본문 가독성 극대화)
     const header = readerPanel.createDiv({ cls: 'scf-reader-header' });
-    const titleRow = header.createDiv({ cls: 'scf-reader-title-row' });
-    titleRow.createSpan({ cls: 'scf-reader-src-badge', text: srcName });
-    const titleKind = (kind && kind !== '장 개관' && !refStr.includes(kind) && !isDigital) ? ` (${kind})` : '';
-    const displayRefTitle = isSpurgeon && snip ? `${refStr} — ${snip}` : `${refStr}${titleKind}`;
-    titleRow.createSpan({ cls: 'scf-reader-ref-title', text: displayRefTitle });
-    if (!isDigital) {
-      if (pgStr) titleRow.createSpan({ cls: 'scf-reader-page-badge', text: pgStr });
-      titleRow.createSpan({ cls: 'scf-reader-fname', text: fname });
-    }
 
     // 3. 툴바
     const toolbar = header.createDiv({ cls: 'scf-reader-toolbar' });

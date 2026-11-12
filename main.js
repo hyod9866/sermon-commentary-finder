@@ -565,7 +565,7 @@ class CommentaryView extends ItemView {
 
     const opt = head.createDiv({ cls: 'scf-opt' });
     const optLeft = opt.createDiv({ cls: 'scf-opt-left' });
-    optLeft.style.cssText = 'display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap;';
+    optLeft.style.cssText = 'display: inline-flex; gap: 10px; align-items: center; flex-wrap: nowrap;';
 
     // 1. 에디터 연동 체크박스 (설교 노트 본문 커서 실시간 동기화)
     const editorLab = optLeft.createEl('label', { cls: 'scf-follow' });
@@ -1552,7 +1552,7 @@ class BibleDictionaryView extends ItemView {
     // 2. 옵션 바: 주석/스트롱코드와 100% 동일한 에디터 연동 체크박스 디자인 & 표제어 개수
     const opt = head.createDiv({ cls: 'scf-opt' });
     const optLeft = opt.createDiv({ cls: 'scf-opt-left' });
-    optLeft.style.cssText = 'display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap;';
+    optLeft.style.cssText = 'display: inline-flex; gap: 10px; align-items: center; flex-wrap: nowrap;';
 
     const editorLab = optLeft.createEl('label', { cls: 'scf-follow' });
     this.editorChk = editorLab.createEl('input', { type: 'checkbox' });

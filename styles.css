@@ -13,8 +13,9 @@
   position: relative !important;
   container-type: inline-size;
 }
+/* 상단 헤더: 검색창 + 옵션 */
 .scf-head {
-  padding: 10px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--background-modifier-border);
   background: var(--background-secondary);
   display: flex;
@@ -26,17 +27,43 @@
 .scf-row {
   display: flex;
   gap: 6px;
+  align-items: center;
 }
 .scf-input {
   flex: 1;
   min-width: 0;
-  height: 30px;
-  font-size: 13px;
+  height: 32px;
+  font-size: 13.5px;
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  border: 1.5px solid var(--background-modifier-border, #cbd5e1) !important;
+  border-radius: 6px !important;
+  padding: 4px 10px !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  font-family: inherit !important;
+  box-sizing: border-box !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.scf-input::placeholder {
+  color: #94a3b8 !important;
+}
+.scf-input:focus {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: var(--interactive-accent, #2563eb) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2), inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+  outline: none !important;
 }
 .scf-btn {
-  height: 30px;
-  padding: 0 12px;
+  height: 32px;
+  padding: 0 13px;
   font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
 }
 .scf-opt {
   display: flex;
@@ -53,13 +80,77 @@
   user-select: none;
   font-size: 11.5px;
   color: var(--text-muted);
+  white-space: nowrap !important;
 }
 .scf-follow input[type="checkbox"] {
   cursor: pointer;
   margin: 0;
+  accent-color: var(--interactive-accent, #2563eb) !important;
 }
 .scf-follow:hover {
   color: var(--text-normal);
+}
+.scf-status {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  white-space: nowrap !important;
+}
+
+/* 가로모드 (iPad landscape) 및 넓은 화면: 에디터 연동, 성경찾기 연동을 검색창 우측에 나란히 배치 */
+@media (orientation: landscape), (min-width: 520px) {
+  .scf-head {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 8px 14px !important;
+    padding: 8px 12px !important;
+  }
+  .scf-head .scf-row {
+    flex: 1 1 240px !important;
+    min-width: 180px !important;
+  }
+  .scf-head .scf-opt {
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+  .scf-head .scf-opt-left {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    flex-wrap: nowrap !important;
+  }
+}
+
+@container (min-width: 440px) {
+  .scf-head {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 8px 14px !important;
+    padding: 8px 12px !important;
+  }
+  .scf-head .scf-row {
+    flex: 1 1 240px !important;
+    min-width: 180px !important;
+  }
+  .scf-head .scf-opt {
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+  .scf-head .scf-opt-left {
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    flex-wrap: nowrap !important;
+  }
 }
 .scf-results {
   flex: 1 1 0% !important;
@@ -500,9 +591,10 @@
 
 /* 좌측 주석 색인 목록 패널 - 자체 독립 스크롤 완벽 보장 */
 .scf-list-panel {
-  width: 250px !important;
-  min-width: 180px !important;
-  max-width: 320px !important;
+  flex: 0 0 30% !important;
+  width: 30% !important;
+  min-width: 110px !important;
+  max-width: 35% !important;
   height: 100% !important;
   min-height: 0 !important;
   max-height: 100% !important;
@@ -846,7 +938,8 @@ button.scf-list-item,
 
 /* 우측 단일 통합 리더 패널 - 자체 독립 스크롤 완벽 보장 */
 .scf-reader-panel {
-  flex: 1 1 0% !important;
+  flex: 0 0 70% !important;
+  width: 70% !important;
   min-width: 0 !important;
   min-height: 0 !important;
   max-height: 100% !important;
@@ -1002,7 +1095,7 @@ button.scf-list-item,
 }
 
 /* 반응형: 420px 미만의 매우 좁은 사이드바 대응 */
-@container (max-width: 420px) {
+@container (max-width: 320px) {
   .scf-split-container {
     flex-direction: column !important;
   }
@@ -1067,14 +1160,15 @@ button.scf-list-item,
   overflow: hidden;
   background: var(--background-primary);
   color: var(--text-normal);
+  container-type: inline-size;
 }
 .scf-dict-head {
-  padding: 10px;
+  padding: 8px 12px;
   background: var(--background-secondary);
   border-bottom: 1px solid var(--background-modifier-border);
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 6px;
   flex-shrink: 0;
   box-sizing: border-box;
 }
@@ -1086,32 +1180,97 @@ button.scf-list-item,
 .scf-dict-search-input {
   flex: 1;
   min-width: 0;
-  height: 30px;
-  padding: 0 10px;
-  font-size: 13px;
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  background: var(--background-primary);
-  color: var(--text-normal);
+  height: 32px;
+  padding: 4px 10px;
+  font-size: 13.5px;
+  border: 1.5px solid var(--background-modifier-border, #cbd5e1) !important;
+  border-radius: 6px;
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
   box-sizing: border-box;
+  font-family: inherit !important;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease !important;
+}
+.scf-dict-search-input::placeholder {
+  color: #94a3b8 !important;
 }
 .scf-dict-search-input:focus {
   outline: none;
-  border-color: var(--interactive-accent);
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border-color: var(--interactive-accent, #2563eb) !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2), inset 0 1px 2px rgba(0, 0, 0, 0.04) !important;
 }
 .scf-dict-clear-btn {
-  height: 30px;
-  padding: 0 10px;
+  height: 32px;
+  padding: 0 11px;
   font-size: 12px;
   background: var(--background-modifier-hover);
   border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
+  border-radius: 6px;
   cursor: pointer;
   color: var(--text-muted);
   box-sizing: border-box;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+}
+
+/* 가로모드 (iPad landscape) 및 넓은 화면: 사전 검색창과 에디터 연동을 한 줄에 배치 */
+@media (orientation: landscape), (min-width: 520px) {
+  .scf-dict-head {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 8px 14px !important;
+    padding: 8px 12px !important;
+  }
+  .scf-dict-head .scf-dict-search-row {
+    flex: 1 1 240px !important;
+    min-width: 180px !important;
+  }
+  .scf-dict-head .scf-opt {
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+  .scf-dict-head .scf-dict-chosung-row {
+    flex: 1 0 100% !important;
+    width: 100% !important;
+    margin-top: 2px !important;
+  }
+}
+
+@container (min-width: 440px) {
+  .scf-dict-head {
+    flex-direction: row !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    flex-wrap: wrap !important;
+    gap: 8px 14px !important;
+    padding: 8px 12px !important;
+  }
+  .scf-dict-head .scf-dict-search-row {
+    flex: 1 1 240px !important;
+    min-width: 180px !important;
+  }
+  .scf-dict-head .scf-opt {
+    flex: 0 0 auto !important;
+    margin-left: auto !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    gap: 12px !important;
+  }
+  .scf-dict-head .scf-dict-chosung-row {
+    flex: 1 0 100% !important;
+    width: 100% !important;
+    margin-top: 2px !important;
+  }
 }
 .scf-dict-clear-btn:hover {
   background: var(--background-modifier-active-hover);
@@ -1185,14 +1344,19 @@ button.scf-list-item,
   display: flex;
   flex: 1;
   overflow: hidden;
+  width: 100%;
+  box-sizing: border-box;
 }
 .scf-dict-list-panel {
-  width: 240px;
-  min-width: 180px;
-  max-width: 320px;
+  flex: 0 0 30% !important;
+  width: 30% !important;
+  min-width: 110px !important;
+  max-width: 35% !important;
+  height: 100%;
   border-right: 1px solid var(--background-modifier-border);
   overflow-y: auto;
   background: var(--background-secondary);
+  box-sizing: border-box;
 }
 .scf-dict-item {
   padding: 8px 12px;
@@ -1230,7 +1394,10 @@ button.scf-list-item,
 
 /* 우측 상세 패널 */
 .scf-dict-detail-panel {
-  flex: 1;
+  flex: 0 0 70% !important;
+  width: 70% !important;
+  min-width: 0 !important;
+  height: 100%;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -1238,6 +1405,7 @@ button.scf-list-item,
   background: var(--background-primary);
   user-select: text !important;
   -webkit-user-select: text !important;
+  box-sizing: border-box;
 }
 .scf-dict-detail-head {
   border-bottom: 2px solid var(--background-modifier-border);
@@ -1432,7 +1600,7 @@ button.scf-list-item,
 }
 
 /* 모바일 및 좁은 화면 반응형 */
-@container (max-width: 420px) {
+@container (max-width: 320px) {
   .scf-dict-split-container {
     flex-direction: column !important;
   }
@@ -1443,4 +1611,37 @@ button.scf-list-item,
     border-right: none !important;
     border-bottom: 2px solid var(--background-modifier-border) !important;
   }
+}
+
+
+/* ============================================================
+   검색창 흰색 배경(#ffffff) 통일 및 성경 찾기(역본 비교 / 스트롱) 연계 지원
+   ============================================================ */
+.scf-input,
+.scf-dict-search-input,
+.scf-view input[type="text"],
+.scf-dict-view input[type="text"],
+.strong-bible-search-input,
+.bible-compare-search-input {
+  background-color: #ffffff !important;
+  color: #1e293b !important;
+}
+
+.scf-input::placeholder,
+.scf-dict-search-input::placeholder,
+.scf-view input[type="text"]::placeholder,
+.scf-dict-view input[type="text"]::placeholder,
+.strong-bible-search-input::placeholder,
+.bible-compare-search-input::placeholder {
+  color: #94a3b8 !important;
+}
+
+.scf-input:focus,
+.scf-dict-search-input:focus,
+.scf-view input[type="text"]:focus,
+.scf-dict-view input[type="text"]:focus,
+.strong-bible-search-input:focus,
+.bible-compare-search-input:focus {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
 }

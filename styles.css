@@ -1645,3 +1645,74 @@ button.scf-list-item,
   background-color: #ffffff !important;
   color: #0f172a !important;
 }
+
+/* ============================================================
+   좌측 색인란과 우측 본문란 사이 터치 리사이저 분할바 (Splitter Bar)
+   ============================================================ */
+.scf-splitter {
+  width: 6px !important;
+  min-width: 6px !important;
+  height: 100% !important;
+  background: var(--background-modifier-border, #cbd5e1);
+  cursor: col-resize;
+  position: relative;
+  z-index: 10;
+  touch-action: none;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0 !important;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background-color 0.15s ease;
+}
+
+.scf-splitter:hover,
+.scf-splitter.is-dragging {
+  background: var(--interactive-accent, #2563eb) !important;
+}
+
+.scf-splitter::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -8px;
+  right: -8px;
+  z-index: 2;
+  touch-action: none;
+}
+
+.scf-splitter-grip {
+  width: 2px;
+  height: 28px;
+  border-radius: 1px;
+  background: var(--text-muted, #64748b);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.scf-splitter.is-dragging .scf-splitter-grip {
+  background: #ffffff;
+  opacity: 1;
+}
+
+/* 모바일/아이패드에서 PC 전용 'PDF 원본' 버튼 완벽 숨김 */
+.is-mobile .scf-pdf-btn,
+.is-tablet .scf-pdf-btn,
+.is-phone .scf-pdf-btn,
+body.is-mobile .scf-pdf-btn,
+body.is-tablet .scf-pdf-btn {
+  display: none !important;
+}
+
+/* 중복 배너 숨김 */
+.scf-reader-status-banner {
+  display: none !important;
+}
+
+@container (max-width: 320px) {
+  .scf-splitter {
+    display: none !important;
+  }
+}

@@ -510,6 +510,64 @@ function scrollPanelToItem(panel, itemEl, align = 'center') {
   }
 }
 
+
+function setupSplitter(container, leftEl, rightEl, resizerEl, onSave, defaultPct = 30) {
+  if (defaultPct && defaultPct >= 15 && defaultPct <= 75) {
+    leftEl.style.setProperty('width', `${defaultPct}%`, 'important');
+    leftEl.style.setProperty('flex', `0 0 ${defaultPct}%`, 'important');
+    rightEl.style.setProperty('width', `calc(${100 - defaultPct}% - 6px)`, 'important');
+    rightEl.style.setProperty('flex', `0 0 calc(${100 - defaultPct}% - 6px)`, 'important');
+  }
+
+  let isDragging = false;
+  let startX = 0;
+  let startW = 0;
+
+  const onPointerDown = (e) => {
+    isDragging = true;
+    startX = e.clientX;
+    startW = leftEl.getBoundingClientRect().width;
+    resizerEl.classList.add('is-dragging');
+    try { resizerEl.setPointerCapture(e.pointerId); } catch (_) {}
+    e.preventDefault();
+    e.stopPropagation();
+  };
+
+  const onPointerMove = (e) => {
+    if (!isDragging) return;
+    const containerW = container.getBoundingClientRect().width;
+    if (containerW < 200) return;
+    const dx = e.clientX - startX;
+    const minW = 100;
+    const maxW = Math.max(minW, containerW - 120);
+    const newW = Math.max(minW, Math.min(maxW, startW + dx));
+    const pct = Math.max(15, Math.min(75, Math.round((newW / containerW) * 100)));
+
+    leftEl.style.setProperty('width', `${pct}%`, 'important');
+    leftEl.style.setProperty('flex', `0 0 ${pct}%`, 'important');
+    rightEl.style.setProperty('width', `calc(${100 - pct}% - 6px)`, 'important');
+    rightEl.style.setProperty('flex', `0 0 calc(${100 - pct}% - 6px)`, 'important');
+  };
+
+  const onPointerUp = (e) => {
+    if (!isDragging) return;
+    isDragging = false;
+    resizerEl.classList.remove('is-dragging');
+    try { resizerEl.releasePointerCapture(e.pointerId); } catch (_) {}
+    const containerW = container.getBoundingClientRect().width;
+    if (containerW > 0) {
+      const curW = leftEl.getBoundingClientRect().width;
+      const pct = Math.max(15, Math.min(75, Math.round((curW / containerW) * 100)));
+      if (typeof onSave === 'function') onSave(pct);
+    }
+  };
+
+  resizerEl.addEventListener('pointerdown', onPointerDown);
+  resizerEl.addEventListener('pointermove', onPointerMove);
+  resizerEl.addEventListener('pointerup', onPointerUp);
+  resizerEl.addEventListener('pointercancel', onPointerUp);
+}
+
 class CommentaryView extends ItemView {
   constructor(leaf, plugin) {
     super(leaf);
@@ -734,10 +792,17 @@ class CommentaryView extends ItemView {
       this.containerEl.scrollLeft = 0;
     }
 
-    // 전체 레이아웃: 좌측 목록 패널 + 우측 단일 통합 본문 뷰어 (오직 1개만 생성)
+    // 전체 레이아웃: 좌측 목록 패널 + 드래그 리사이저 바(Splitter) + 우측 본문 뷰어
     const split = el.createDiv({ cls: 'scf-split-container' });
     const listPanel = split.createDiv({ cls: 'scf-list-panel' });
+    const resizer = split.createDiv({ cls: 'scf-splitter' });
+    resizer.createDiv({ cls: 'scf-splitter-grip' });
     const readerPanel = split.createDiv({ cls: 'scf-reader-panel' });
+
+    setupSplitter(split, listPanel, readerPanel, resizer, (newPct) => {
+      this.plugin.settings.commentarySplitPct = newPct;
+      this.plugin.saveSettings();
+    }, this.plugin.settings.commentarySplitPct || 30);
 
     const bName = getBookDisplayName(r.b, this.plugin);
     const unit = r.b === 19 ? '편' : '장';
@@ -1149,24 +1214,30 @@ class CommentaryView extends ItemView {
       updateFontSize(15);
     };
 
-    // PDF 버튼
-    const pdfBtn = toolbar.createEl('button', {
-      cls: 'scf-mini-btn scf-pdf-btn',
-      text: '📄 PDF 원본',
-      title: `${fname} — ${p1}쪽을 Edge/외부 뷰어로 열기`
-    });
-    pdfBtn.onclick = async (evt) => {
-      if (evt) evt.stopPropagation();
-      pdfBtn.setText('⏳ PDF 여는 중...');
-      try {
-        await this.plugin.openPdf(file[0], file[1], p1);
-      } catch (err) {
-        new Notice('PDF 열기 오류: ' + err.message);
-      } finally {
-        setTimeout(() => pdfBtn.setText('📄 PDF 원본'), 2500);
-      }
-    };
-    pdfBtn.addEventListener('pointerdown', (evt) => evt.stopPropagation());
+    // PDF 버튼 (PC 전용: 아이패드 및 모바일에서는 불필요하므로 생성하지 않음)
+    const isMobileDevice = (this.app && this.app.isMobile) ||
+                           (typeof require !== 'function') ||
+                           (typeof navigator !== 'undefined' && /iPad|iPhone|Android/i.test(navigator.userAgent)) ||
+                           (document.body && (document.body.classList.contains('is-mobile') || document.body.classList.contains('is-tablet')));
+    if (!isMobileDevice) {
+      const pdfBtn = toolbar.createEl('button', {
+        cls: 'scf-mini-btn scf-pdf-btn',
+        text: '📄 PDF 원본',
+        title: `${fname} — ${p1}쪽을 Edge/외부 뷰어로 열기`
+      });
+      pdfBtn.onclick = async (evt) => {
+        if (evt) evt.stopPropagation();
+        pdfBtn.setText('⏳ PDF 여는 중...');
+        try {
+          await this.plugin.openPdf(file[0], file[1], p1);
+        } catch (err) {
+          new Notice('PDF 열기 오류: ' + err.message);
+        } finally {
+          setTimeout(() => pdfBtn.setText('📄 PDF 원본'), 2500);
+        }
+      };
+      pdfBtn.addEventListener('pointerdown', (evt) => evt.stopPropagation());
+    }
 
     // 편집 버튼
     const editBtn = toolbar.createEl('button', {
@@ -1232,34 +1303,8 @@ class CommentaryView extends ItemView {
         if (this._selectItem) this._selectItem(prevEntry);
       };
     }
+    // 상태 배너: 상단 헤더 타이틀과 중복되던 불필요한 배너(AI 교정본 열람중, 정본 주석, 스펄전 설교전집 등) 말끔히 제거
 
-    // 상태 배너
-    const statusBanner = scrollContainer.createDiv({ cls: 'scf-reader-status-banner' });
-    let badgeCls = 'scf-badge-ocr';
-    let badgeText = '📄 주석 텍스트';
-    if (isCorrected) {
-      badgeCls = 'scf-badge-corrected';
-      badgeText = '✓ AI 교정본 열람 중';
-    } else if (isHokma) {
-      badgeCls = 'scf-badge-hokma';
-      badgeText = '✓ 호크마 정본 디지털 주석';
-    } else if (isMatthew) {
-      badgeCls = 'scf-badge-matthew';
-      badgeText = '✓ 매튜헨리 정본 주석';
-    } else if (isSpurgeon) {
-      badgeCls = 'scf-badge-spurgeon';
-      badgeText = '✓ 스펄전 설교전집';
-    } else if (isSpurgeonPs) {
-      badgeCls = 'scf-badge-spurgeon-psalms';
-      badgeText = '✓ 스펄전 시편강해';
-    } else if (isMackintosh) {
-      badgeCls = 'scf-badge-mackintosh';
-      badgeText = '✓ 매킨토시 모세오경';
-    }
-    const badgeEl = statusBanner.createSpan({
-      cls: 'scf-badge ' + badgeCls,
-      text: badgeText
-    });
 
     // 본문 텍스트 엘리먼트
     const contentEl = scrollContainer.createDiv({ cls: 'scf-fulltext' });
@@ -1586,10 +1631,17 @@ class BibleDictionaryView extends ItemView {
       this.chosungBtns[c] = btn;
     }
 
-    // 4. 2단 분할 레이아웃 (좌측: 표제어 목록, 우측: 상세 정의)
+    // 4. 2단 분할 레이아웃 (좌측: 표제어 목록, 리사이저 바, 우측: 상세 정의)
     this.splitEl = root.createDiv({ cls: 'scf-dict-split-container' });
     this.listEl = this.splitEl.createDiv({ cls: 'scf-dict-list-panel' });
+    const dictResizer = this.splitEl.createDiv({ cls: 'scf-splitter' });
+    dictResizer.createDiv({ cls: 'scf-splitter-grip' });
     this.detailEl = this.splitEl.createDiv({ cls: 'scf-dict-detail-panel' });
+
+    setupSplitter(this.splitEl, this.listEl, this.detailEl, dictResizer, (newPct) => {
+      this.plugin.settings.dictSplitPct = newPct;
+      this.plugin.saveSettings();
+    }, this.plugin.settings.dictSplitPct || 30);
 
     this.renderList();
     if (this.dictData && this.dictData.entries && this.dictData.entries.length > 0) {

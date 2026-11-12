@@ -591,10 +591,9 @@
 
 /* 좌측 주석 색인 목록 패널 - 자체 독립 스크롤 완벽 보장 */
 .scf-list-panel {
-  flex: 0 0 30% !important;
-  width: 30% !important;
-  min-width: 110px !important;
-  max-width: 35% !important;
+  flex: 0 0 30%;
+  width: 30%;
+  min-width: 80px;
   height: 100% !important;
   min-height: 0 !important;
   max-height: 100% !important;
@@ -604,7 +603,6 @@
   overflow-x: hidden !important;
   overscroll-behavior-y: contain !important;
   flex-shrink: 0 !important;
-  flex-grow: 0 !important;
   padding: 8px 6px 40px !important;
   display: block !important;
   box-sizing: border-box !important;
@@ -938,8 +936,8 @@ button.scf-list-item,
 
 /* 우측 단일 통합 리더 패널 - 자체 독립 스크롤 완벽 보장 */
 .scf-reader-panel {
-  flex: 0 0 70% !important;
-  width: 70% !important;
+  flex: 1 1 0% !important;
+  width: auto !important;
   min-width: 0 !important;
   min-height: 0 !important;
   max-height: 100% !important;
@@ -1348,10 +1346,9 @@ button.scf-list-item,
   box-sizing: border-box;
 }
 .scf-dict-list-panel {
-  flex: 0 0 30% !important;
-  width: 30% !important;
-  min-width: 110px !important;
-  max-width: 35% !important;
+  flex: 0 0 30%;
+  width: 30%;
+  min-width: 80px;
   height: 100%;
   border-right: 1px solid var(--background-modifier-border);
   overflow-y: auto;
@@ -1394,8 +1391,8 @@ button.scf-list-item,
 
 /* 우측 상세 패널 */
 .scf-dict-detail-panel {
-  flex: 0 0 70% !important;
-  width: 70% !important;
+  flex: 1 1 0% !important;
+  width: auto !important;
   min-width: 0 !important;
   height: 100%;
   display: flex;
@@ -1649,6 +1646,7 @@ button.scf-list-item,
 /* ============================================================
    좌측 색인란과 우측 본문란 사이 터치 리사이저 분할바 (Splitter Bar)
    ============================================================ */
+
 .scf-splitter {
   width: 6px !important;
   min-width: 6px !important;
@@ -1656,7 +1654,7 @@ button.scf-list-item,
   background: var(--background-modifier-border, #cbd5e1);
   cursor: col-resize;
   position: relative;
-  z-index: 10;
+  z-index: 20;
   touch-action: none;
   display: flex !important;
   align-items: center;
@@ -1672,15 +1670,17 @@ button.scf-list-item,
   background: var(--interactive-accent, #2563eb) !important;
 }
 
-.scf-splitter::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: -8px;
-  right: -8px;
-  z-index: 2;
-  touch-action: none;
+.scf-splitter-hitarea {
+  position: absolute !important;
+  top: 0 !important;
+  bottom: 0 !important;
+  left: -16px !important;
+  right: -16px !important;
+  width: 38px !important;
+  height: 100% !important;
+  z-index: 25 !important;
+  touch-action: none !important;
+  cursor: col-resize !important;
 }
 
 .scf-splitter-grip {
@@ -1696,6 +1696,7 @@ button.scf-list-item,
   background: #ffffff;
   opacity: 1;
 }
+
 
 /* 모바일/아이패드에서 PC 전용 'PDF 원본' 버튼 완벽 숨김 */
 .is-mobile .scf-pdf-btn,

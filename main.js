@@ -512,60 +512,91 @@ function scrollPanelToItem(panel, itemEl, align = 'center') {
 
 
 function setupSplitter(container, leftEl, rightEl, resizerEl, onSave, defaultPct = 30) {
+  // 터치 친화적 36px 히트 영역 생성
+  if (!resizerEl.querySelector('.scf-splitter-hitarea')) {
+    resizerEl.createDiv({ cls: 'scf-splitter-hitarea' });
+  }
+
+  // 초기 저장 비율 복원
   if (defaultPct && defaultPct >= 15 && defaultPct <= 75) {
-    leftEl.style.setProperty('width', `${defaultPct}%`, 'important');
-    leftEl.style.setProperty('flex', `0 0 ${defaultPct}%`, 'important');
-    rightEl.style.setProperty('width', `calc(${100 - defaultPct}% - 6px)`, 'important');
-    rightEl.style.setProperty('flex', `0 0 calc(${100 - defaultPct}% - 6px)`, 'important');
+    leftEl.style.width = `${defaultPct}%`;
   }
 
   let isDragging = false;
   let startX = 0;
   let startW = 0;
 
-  const onPointerDown = (e) => {
-    isDragging = true;
-    startX = e.clientX;
-    startW = leftEl.getBoundingClientRect().width;
-    resizerEl.classList.add('is-dragging');
-    try { resizerEl.setPointerCapture(e.pointerId); } catch (_) {}
-    e.preventDefault();
-    e.stopPropagation();
+  const getClientX = (e) => {
+    if (e.clientX !== undefined && e.clientX !== null && e.clientX !== 0) return e.clientX;
+    if (e.touches && e.touches[0]) return e.touches[0].clientX;
+    if (e.changedTouches && e.changedTouches[0]) return e.changedTouches[0].clientX;
+    return 0;
   };
 
-  const onPointerMove = (e) => {
+  const onMove = (e) => {
     if (!isDragging) return;
+    const clientX = getClientX(e);
+    if (!clientX) return;
     const containerW = container.getBoundingClientRect().width;
-    if (containerW < 200) return;
-    const dx = e.clientX - startX;
-    const minW = 100;
-    const maxW = Math.max(minW, containerW - 120);
+    if (containerW < 120) return;
+    const dx = clientX - startX;
+    const minW = 80;
+    const maxW = Math.max(minW, containerW - 100);
     const newW = Math.max(minW, Math.min(maxW, startW + dx));
-    const pct = Math.max(15, Math.min(75, Math.round((newW / containerW) * 100)));
 
-    leftEl.style.setProperty('width', `${pct}%`, 'important');
-    leftEl.style.setProperty('flex', `0 0 ${pct}%`, 'important');
-    rightEl.style.setProperty('width', `calc(${100 - pct}% - 6px)`, 'important');
-    rightEl.style.setProperty('flex', `0 0 calc(${100 - pct}% - 6px)`, 'important');
+    leftEl.style.setProperty('width', `${newW}px`, 'important');
+    leftEl.style.setProperty('flex', 'none', 'important');
+    leftEl.style.setProperty('max-width', 'none', 'important');
+    rightEl.style.setProperty('flex', '1 1 0%', 'important');
+    rightEl.style.setProperty('width', 'auto', 'important');
+
+    if (e.cancelable) e.preventDefault();
   };
 
-  const onPointerUp = (e) => {
+  const onStop = (e) => {
     if (!isDragging) return;
     isDragging = false;
     resizerEl.classList.remove('is-dragging');
-    try { resizerEl.releasePointerCapture(e.pointerId); } catch (_) {}
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    window.removeEventListener('pointermove', onMove);
+    window.removeEventListener('pointerup', onStop);
+    window.removeEventListener('pointercancel', onStop);
+    window.removeEventListener('touchmove', onMove);
+    window.removeEventListener('touchend', onStop);
+    window.removeEventListener('touchcancel', onStop);
+
     const containerW = container.getBoundingClientRect().width;
     if (containerW > 0) {
       const curW = leftEl.getBoundingClientRect().width;
       const pct = Math.max(15, Math.min(75, Math.round((curW / containerW) * 100)));
+      leftEl.style.setProperty('width', `${pct}%`, 'important');
       if (typeof onSave === 'function') onSave(pct);
     }
   };
 
-  resizerEl.addEventListener('pointerdown', onPointerDown);
-  resizerEl.addEventListener('pointermove', onPointerMove);
-  resizerEl.addEventListener('pointerup', onPointerUp);
-  resizerEl.addEventListener('pointercancel', onPointerUp);
+  const onStart = (e) => {
+    isDragging = true;
+    startX = getClientX(e);
+    startW = leftEl.getBoundingClientRect().width;
+    resizerEl.classList.add('is-dragging');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+
+    window.addEventListener('pointermove', onMove, { passive: false });
+    window.addEventListener('pointerup', onStop);
+    window.addEventListener('pointercancel', onStop);
+    window.addEventListener('touchmove', onMove, { passive: false });
+    window.addEventListener('touchend', onStop);
+    window.addEventListener('touchcancel', onStop);
+
+    if (e.cancelable) e.preventDefault();
+    e.stopPropagation();
+  };
+
+  resizerEl.addEventListener('pointerdown', onStart);
+  resizerEl.addEventListener('touchstart', onStart, { passive: false });
 }
 
 class CommentaryView extends ItemView {

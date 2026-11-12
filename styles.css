@@ -1,0 +1,1446 @@
+/* 주석 찾기 (Commentary Finder) — 모든 클래스는 scf- 접두사로 다른 플러그인과 겹치지 않게 함 */
+.view-content.scf-view,
+.scf-view {
+  --scf-font-size: 15px;
+  display: flex !important;
+  flex-direction: column !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+  container-type: inline-size;
+}
+.scf-head {
+  padding: 10px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+.scf-row {
+  display: flex;
+  gap: 6px;
+}
+.scf-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  font-size: 13px;
+}
+.scf-btn {
+  height: 30px;
+  padding: 0 12px;
+  font-size: 12.5px;
+}
+.scf-opt {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.scf-follow {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  cursor: pointer;
+  user-select: none;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+.scf-follow input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+}
+.scf-follow:hover {
+  color: var(--text-normal);
+}
+.scf-results {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  height: 100% !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+}
+.scf-empty {
+  color: var(--text-muted);
+  font-size: 12.5px;
+  padding: 16px 14px;
+  line-height: 1.6;
+}
+.scf-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 2px 0 8px;
+}
+.scf-src {
+  margin-bottom: 14px;
+}
+.scf-src-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-accent);
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: 3px;
+  margin-bottom: 4px;
+}
+.scf-item {
+  padding: 6px 7px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+.scf-item:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+}
+.scf-item-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+.scf-ref {
+  font-weight: 700;
+}
+.scf-kind {
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 9px;
+  background: var(--background-modifier-border);
+  color: var(--text-normal);
+}
+.scf-kind-강해주석 { background: rgba(18, 68, 175, 0.15); }
+.scf-kind-원어대전 { background: rgba(20, 83, 45, 0.16); }
+.scf-kind-설교 { background: rgba(140, 61, 11, 0.16); }
+.scf-kind-장개관 { background: rgba(107, 33, 168, 0.15); }
+.scf-page {
+  font-weight: 600;
+  color: var(--text-accent);
+}
+.scf-file {
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.scf-actions {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.scf-mini-btn {
+  height: 22px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.scf-mini-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+.scf-copy-btn {
+  color: var(--text-accent);
+}
+.scf-insert-btn {
+  color: var(--text-accent);
+}
+.scf-insert-btn:hover {
+  border-color: var(--text-accent);
+  background: var(--background-modifier-hover);
+}
+.scf-edit-btn {
+  color: var(--text-muted);
+}
+.scf-edit-btn:hover {
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+.scf-ai-btn {
+  color: #8b5cf6;
+}
+.scf-ai-btn:hover {
+  border-color: #8b5cf6;
+  color: #7c3aed;
+}
+.scf-ai-btn.is-corrected {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.4);
+  background: rgba(16, 185, 129, 0.08);
+}
+.scf-body-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--background-modifier-border);
+}
+.scf-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.scf-badge-corrected {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+.scf-badge-hokma {
+  background: rgba(59, 130, 246, 0.15);
+  color: var(--interactive-accent, #3b82f6);
+  font-weight: 600;
+}
+.scf-badge-matthew {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+  font-weight: 600;
+}
+.scf-badge-spurgeon {
+  background: rgba(245, 158, 11, 0.15);
+  color: #d97706;
+  font-weight: 600;
+}
+.scf-badge-spurgeon-psalms {
+  background: rgba(236, 72, 153, 0.15);
+  color: #db2777;
+  font-weight: 600;
+}
+.scf-badge-mackintosh {
+  background: rgba(14, 165, 233, 0.15);
+  color: #0284c7;
+  font-weight: 600;
+}
+.scf-badge-ocr {
+  background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.scf-toggle-orig-btn {
+  font-size: 11px;
+  padding: 1px 7px;
+  height: 22px;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.scf-toggle-orig-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+.scf-body {
+  display: none;
+  margin-top: 6px;
+  padding: 10px 14px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+.scf-body.is-open {
+  display: block;
+}
+.scf-fulltext {
+  font-family: "Pretendard", "Freesentation", var(--font-interface), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif !important;
+  font-size: var(--scf-font-size, 15px) !important;
+  line-height: 1.82 !important;
+  letter-spacing: -0.015em;
+  color: var(--text-normal);
+  word-break: break-word;
+  margin: 0;
+  background: transparent;
+  border: none;
+  padding: 0;
+  width: 100%;
+  box-sizing: border-box;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+}
+.scf-fulltext p {
+  font-size: var(--scf-font-size, 15px) !important;
+  line-height: 1.82 !important;
+  margin-bottom: 0.85em;
+}
+.scf-fulltext h1,
+.scf-fulltext h2,
+.scf-fulltext h3,
+.scf-fulltext h4,
+.scf-fulltext strong.scf-heading {
+  font-size: calc(var(--scf-font-size, 15px) * 1.25) !important; /* 본문보다 4px 크게 볼드 */
+  font-weight: 700 !important;
+  color: var(--text-accent, var(--text-normal)) !important;
+  display: block;
+  margin-top: 1.2em;
+  margin-bottom: 0.6em;
+}
+
+/* 절별 강해주석 시작 표제어 (고딕 볼드 + 볼드 파란색) */
+.scf-verse-head {
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700 !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.15) !important;
+  color: var(--interactive-accent, #2563eb) !important;
+  display: block !important;
+  margin-top: 1.6em !important;
+  margin-bottom: 0.45em !important;
+  line-height: 1.45 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* 절 내부 중간 소제목 표제어 */
+.scf-subhead {
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700 !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.05) !important;
+  color: var(--text-accent, #3b82f6) !important;
+  display: block !important;
+  margin-top: 1.2em !important;
+  margin-bottom: 0.4em !important;
+  line-height: 1.45 !important;
+}
+
+/* 강해주석 단락 개요 박스 (책의 테두리 박스 반영) */
+.scf-fulltext .callout,
+.scf-fulltext .callout[data-callout="note"],
+.scf-overview-box,
+.scf-box {
+  border: 1.5px solid var(--interactive-accent, #3b82f6) !important;
+  background-color: var(--background-secondary) !important;
+  border-radius: 8px !important;
+  padding: 14px 18px !important;
+  margin: 16px 0 !important;
+}
+
+.scf-fulltext .callout[data-callout="note"] .callout-title,
+.scf-overview-title {
+  font-family: "Pretendard", "Freesentation", sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  color: var(--interactive-accent, #2563eb) !important;
+  margin-bottom: 8px !important;
+}
+
+.scf-fulltext .callout[data-callout="note"] .callout-content {
+  font-family: "Pretendard", "Freesentation", sans-serif !important;
+  font-size: 14.5px !important;
+  line-height: 1.82 !important;
+  color: var(--text-normal) !important;
+}
+
+/* 명조체와 고딕체 구분: 본문 해설과 개요 박스는 가독성 높은 고딕체, 성경 인용/외울말씀만 품격 있는 명조체 */
+.scf-fulltext .callout[data-callout="quote"],
+.scf-fulltext .callout[data-callout="quote"] .callout-content,
+.scf-fulltext .scf-myeongjo,
+.scf-fulltext .scf-quote {
+  font-family: "RIDIBatang", "Nanum Myeongjo", "Batang", "KoPubWorldBatang", serif !important;
+  font-style: normal;
+}
+
+/* 상호참조 링크 ('0000 자료노트 참조' 등) */
+.scf-ref-link {
+  color: var(--interactive-accent) !important;
+  text-decoration: underline !important;
+  text-underline-offset: 3px;
+  cursor: pointer;
+  font-weight: 600;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgba(18, 68, 175, 0.08);
+  display: inline-block;
+  margin: 0 2px;
+  transition: background 0.15s ease;
+}
+.scf-ref-link:hover {
+  background: rgba(18, 68, 175, 0.2) !important;
+  color: var(--interactive-accent-hover, #2563eb) !important;
+}
+
+/* 이전 주석으로 돌아가기 버튼 */
+.scf-back-btn {
+  background: var(--interactive-accent) !important;
+  color: #fff !important;
+  font-weight: 700 !important;
+  border-radius: 4px;
+  padding: 4px 10px;
+}
+.scf-back-btn:hover {
+  background: var(--interactive-accent-hover, #2563eb) !important;
+}
+.scf-fulltext table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.scf-fulltext th,
+.scf-fulltext td {
+  border: 1px solid var(--background-modifier-border);
+  padding: 6px 10px;
+  text-align: left;
+}
+.scf-fulltext th {
+  background: var(--background-secondary);
+  font-weight: 600;
+}
+.scf-fulltext hr {
+  margin: 14px 0;
+  border: none;
+  border-top: 1px dashed var(--background-modifier-border);
+}
+.scf-fulltext .callout {
+  margin: 12px 0;
+}
+.scf-edit-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 4px;
+}
+.scf-editor {
+  width: 100%;
+  min-height: 240px;
+  font-family: "Freesentation 5", "Freesentation", "Pretendard", var(--font-interface), sans-serif !important;
+  font-size: 14px;
+  line-height: 1.7;
+  padding: 8px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--interactive-accent);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  resize: vertical;
+  box-sizing: border-box;
+}
+.scf-edit-toolbar {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-top: 2px;
+}
+.scf-save-btn {
+  background: var(--interactive-accent) !important;
+  color: var(--text-on-accent) !important;
+  border: none !important;
+  font-weight: 600;
+  padding: 0 10px !important;
+  height: 24px !important;
+}
+.scf-save-btn:hover {
+  background: var(--interactive-accent-hover) !important;
+}
+.scf-cancel-btn {
+  padding: 0 8px !important;
+  height: 24px !important;
+}
+.scf-edit-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 4px;
+}
+.scf-snip {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.scf-chapter {
+  margin-top: 4px;
+}
+.scf-chapter > summary {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 2px;
+}
+
+
+/* ============================================================
+   새로운 마스터-디테일 (좌측 목록 + 우측 단일 통합 뷰어) 레이아웃
+   ============================================================ */
+.scf-split-container {
+  display: flex !important;
+  flex-direction: row !important;
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  height: 100% !important;
+  width: 100% !important;
+  overflow: hidden !important;
+  background: var(--background-primary);
+  box-sizing: border-box !important;
+  position: relative !important;
+}
+
+/* 좌측 주석 색인 목록 패널 - 자체 독립 스크롤 완벽 보장 */
+.scf-list-panel {
+  width: 250px !important;
+  min-width: 180px !important;
+  max-width: 320px !important;
+  height: 100% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  border-right: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain !important;
+  flex-shrink: 0 !important;
+  flex-grow: 0 !important;
+  padding: 8px 6px 40px !important;
+  display: block !important;
+  box-sizing: border-box !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--scrollbar-thumb-bg, rgba(128, 128, 128, 0.4)) transparent !important;
+}
+
+/* 각 장의 시작 제목 (Hero Chapter Title - PDF 원본처럼 크고 돋보이게 표시) */
+.scf-chapter-hero-title {
+  text-align: center;
+  margin: 18px 0 24px;
+  padding: 16px 20px;
+  background: var(--background-secondary, rgba(128, 128, 128, 0.08));
+  border-radius: 8px;
+  border-top: 3px solid var(--interactive-accent);
+  border-bottom: 1px solid var(--background-modifier-border);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+.scf-chapter-badge {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--interactive-accent, #2563eb);
+  letter-spacing: 2px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+.scf-chapter-name {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--text-normal);
+  font-family: var(--font-text-theme, "Pretendard", -apple-system, sans-serif);
+}
+
+/* 강해주석 단락 해설 박스 (Passage Overview Box - 원본처럼 깔끔한 테두리 박스 격리) */
+.scf-passage-box {
+  margin: 18px 0 22px;
+  padding: 16px 20px;
+  background: var(--background-secondary, rgba(128, 128, 128, 0.06));
+  border: 1.5px solid var(--interactive-accent, #2563eb);
+  border-left: 5px solid var(--interactive-accent, #2563eb);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+}
+.scf-passage-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--interactive-accent, #2563eb);
+  margin-bottom: 10px;
+  line-height: 1.4;
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+.scf-passage-body {
+  font-size: 14.5px;
+  line-height: 1.8;
+  color: var(--text-normal);
+}
+
+/* 본문 & 자료노트 검은 음영 배지 (원어연구, 보감, 신학용어) */
+.scf-pill-black {
+  background: #0f172a !important;
+  color: #ffffff !important;
+  font-weight: 800 !important;
+  font-size: 11.5px !important;
+  padding: 2px 7px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+  margin-right: 6px !important;
+  vertical-align: middle !important;
+  letter-spacing: 0.5px !important;
+}
+
+/* 본문 단락 소제목 회색 음영 배지 */
+.scf-pill-gray {
+  background: var(--background-modifier-border, #e2e8f0) !important;
+  color: var(--text-normal, #1e293b) !important;
+  font-weight: 700 !important;
+  font-size: 12px !important;
+  padding: 3px 9px !important;
+  border-radius: 4px !important;
+  display: inline-block !important;
+  margin: 10px 0 6px !important;
+}
+
+/* 외울말씀 박스 (원본 책 테두리 박스 및 한영 대조) */
+.scf-memory-verse-box {
+  margin: 20px 0 !important;
+  padding: 16px 20px !important;
+  border: 1.5px solid var(--interactive-accent, #2563eb) !important;
+  border-radius: 8px !important;
+  background: var(--background-secondary, #f8fafc) !important;
+  text-align: center !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}
+.scf-memory-verse-title {
+  font-size: 13.5px !important;
+  font-weight: 800 !important;
+  color: var(--interactive-accent, #2563eb) !important;
+  letter-spacing: 2px !important;
+  margin-bottom: 12px !important;
+}
+.scf-memory-verse-kr {
+  font-size: 14.5px !important;
+  line-height: 1.8 !important;
+  font-weight: 600 !important;
+  color: var(--text-normal) !important;
+  font-family: var(--font-text-theme, "Pretendard", -apple-system, sans-serif) !important;
+  margin-bottom: 14px !important;
+}
+.scf-memory-verse-en {
+  font-size: 13px !important;
+  line-height: 1.6 !important;
+  font-style: italic !important;
+  color: var(--text-muted) !important;
+  font-family: Georgia, serif !important;
+  border-top: 1px dashed var(--background-modifier-border) !important;
+  padding-top: 10px !important;
+}
+
+/* 상단 이전 주석 보기 버튼 */
+.scf-prev-section-btn {
+  width: 100%;
+  margin-bottom: 14px;
+  padding: 8px 12px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  border: 1px dashed var(--background-modifier-border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+.scf-prev-section-btn:hover {
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+}
+
+/* 좌측 목록 헤더 (현재 장 정보 및 전체보기 토글) */
+.scf-list-head {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 6px 8px !important;
+  margin-bottom: 8px !important;
+  background: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04) !important;
+}
+.scf-list-head-title {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: var(--text-normal) !important;
+  padding: 0 !important;
+  border-bottom: none !important;
+  margin-bottom: 0 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.scf-toggle-scope-btn {
+  font-size: 11px !important;
+  padding: 2px 7px !important;
+  border-radius: 4px !important;
+  color: var(--interactive-accent, #2563eb) !important;
+  border: 1px solid var(--interactive-accent, #2563eb) !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  flex-shrink: 0 !important;
+}
+.scf-toggle-scope-btn:hover {
+  background: var(--interactive-accent, #2563eb) !important;
+  color: #fff !important;
+}
+
+/* 이전/다음 장 내비게이션 버튼 (상/하단) */
+.scf-chapter-nav-btn {
+  width: 100% !important;
+  display: block !important;
+  padding: 7px 10px !important;
+  margin: 4px 0 8px !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-align: center !important;
+  color: var(--text-muted) !important;
+  background: var(--background-primary) !important;
+  border: 1px dashed var(--background-modifier-border) !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  box-sizing: border-box !important;
+}
+.scf-chapter-nav-btn:hover {
+  color: var(--interactive-accent, #2563eb) !important;
+  border-color: var(--interactive-accent, #2563eb) !important;
+  background: var(--background-modifier-hover) !important;
+}
+.scf-chapter-nav-btn-next {
+  margin: 10px 0 16px !important;
+}
+
+/* 주석서 그룹 (그랜드 종합주석, 옥스퍼드 원어대전, 스펄전 등) */
+.scf-src-group {
+  margin-bottom: 6px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.scf-src-summary {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-accent);
+  padding: 6px 8px;
+  cursor: pointer;
+  background: var(--background-secondary);
+  user-select: none;
+  -webkit-user-select: none;
+  transition: background 0.15s ease;
+}
+.scf-src-summary:hover {
+  background: var(--background-modifier-hover);
+}
+
+.scf-src-items {
+  display: flex;
+  flex-direction: column;
+}
+
+/* 목록 항목 (클릭하여 우측 본문 로드) - button 태그로 브라우저/옵시디언 100% 클릭 보장 */
+button.scf-list-item,
+.scf-list-item {
+  width: 100%;
+  padding: 8px 10px;
+  margin: 2px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-normal);
+  background: transparent;
+  border: 1px solid transparent;
+  text-align: left;
+  line-height: normal;
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-shadow: none;
+  outline: none;
+  transition: all 0.15s ease;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  box-sizing: border-box;
+}
+.scf-list-item * {
+  pointer-events: none;
+}
+.scf-list-item:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--background-modifier-border);
+}
+.scf-list-item.is-active {
+  background: rgba(18, 68, 175, 0.14) !important;
+  border-color: var(--interactive-accent) !important;
+  color: var(--interactive-accent) !important;
+  border-left: 4px solid var(--interactive-accent) !important;
+  font-weight: 700;
+}
+
+.scf-list-badge {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--text-accent);
+  flex-shrink: 0;
+}
+.scf-list-ref {
+  flex: 1;
+  font-family: "Pretendard", sans-serif !important;
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: var(--text-normal);
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.scf-list-item.is-active .scf-list-ref {
+  color: var(--interactive-accent, #2563eb) !important;
+  font-weight: 700 !important;
+}
+.scf-list-kind {
+  font-size: 10.5px !important;
+  font-weight: 600 !important;
+  padding: 2px 6px !important;
+  border-radius: 6px !important;
+  flex-shrink: 0 !important;
+}
+
+/* 폰트 크기 조절 컨트롤 (+ / -) */
+.scf-font-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.scf-font-btn {
+  font-weight: 700 !important;
+  font-family: "Pretendard", sans-serif !important;
+  padding: 0 7px !important;
+  min-width: 26px !important;
+}
+.scf-font-indicator {
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  color: var(--text-muted) !important;
+  padding: 0 6px !important;
+  min-width: 36px !important;
+  text-align: center !important;
+}
+.scf-font-indicator:hover {
+  color: var(--interactive-accent) !important;
+}
+
+/* 우측 단일 통합 리더 패널 - 자체 독립 스크롤 완벽 보장 */
+.scf-reader-panel {
+  flex: 1 1 0% !important;
+  min-width: 0 !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  height: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  background: var(--background-primary);
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+  position: relative !important;
+}
+
+.scf-reader-header {
+  padding: 10px 14px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.scf-reader-title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.scf-reader-src-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-accent);
+  background: rgba(18, 68, 175, 0.12);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.scf-reader-ref-title {
+  font-family: "Pretendard", "Freesentation", sans-serif !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.25) !important; /* 본문보다 약 4px 크게 볼드 */
+  font-weight: 700 !important;
+  color: var(--text-normal);
+}
+.scf-reader-page-badge {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--text-accent);
+}
+.scf-reader-fname {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-left: auto;
+}
+
+.scf-reader-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+/* 본문 스크롤 영역 - 자체 독립 스크롤 완벽 보장 */
+.scf-reader-scroll {
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  max-height: 100% !important;
+  height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 16px 20px 80px !important;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+  cursor: text;
+  box-sizing: border-box !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--scrollbar-thumb-bg, rgba(128, 128, 128, 0.4)) transparent !important;
+}
+
+/* 스크롤바 커스텀 스타일 (목록 패널 & 본문 뷰어 둘 다 항상 직관적으로 표시) */
+.scf-list-panel::-webkit-scrollbar,
+.scf-reader-scroll::-webkit-scrollbar {
+  width: 7px !important;
+  height: 7px !important;
+}
+.scf-list-panel::-webkit-scrollbar-track,
+.scf-reader-scroll::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+.scf-list-panel::-webkit-scrollbar-thumb,
+.scf-reader-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb-bg, rgba(128, 128, 128, 0.35)) !important;
+  border-radius: 4px !important;
+}
+.scf-list-panel::-webkit-scrollbar-thumb:hover,
+.scf-reader-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-bg-hover, rgba(128, 128, 128, 0.65)) !important;
+}
+
+.scf-reader-status-banner {
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px dashed var(--background-modifier-border);
+}
+
+/* 연속 페이지 스크롤 및 로더 */
+.scf-continuous-box {
+  margin-top: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
+}
+.scf-appended-page {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 2px dashed var(--background-modifier-border);
+}
+.scf-page-divider {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  border-left: 3px solid var(--interactive-accent);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--text-accent);
+  margin-bottom: 12px;
+}
+.scf-next-page-btn {
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  color: var(--text-normal);
+  transition: all 0.15s;
+  text-align: center;
+  align-self: center;
+  margin: 12px 0;
+}
+.scf-next-page-btn:hover {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: var(--interactive-accent);
+}
+.scf-end-notice {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 16px 0;
+}
+
+/* 반응형: 420px 미만의 매우 좁은 사이드바 대응 */
+@container (max-width: 420px) {
+  .scf-split-container {
+    flex-direction: column !important;
+  }
+  .scf-list-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 100% !important;
+    height: 190px !important;
+    max-height: 190px !important;
+    min-height: 120px !important;
+    border-right: none !important;
+    border-bottom: 2px solid var(--background-modifier-border) !important;
+    flex-shrink: 0 !important;
+  }
+  .scf-reader-panel {
+    width: 100% !important;
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    height: 100% !important;
+  }
+}
+
+
+/* === 테이블(표) 스타일링: 그랜드종합주석 도표 및 대조표 === */
+.scf-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0;
+  font-size: var(--scf-font-size, 15px) !important;
+  line-height: 1.6 !important;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+}
+.scf-table th, .scf-table td {
+  border: 1px solid var(--background-modifier-border);
+  padding: 8px 12px;
+  text-align: left;
+  vertical-align: top;
+  font-size: var(--scf-font-size, 15px) !important;
+  line-height: 1.6 !important;
+}
+.scf-table thead th {
+  background: var(--background-secondary);
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.scf-table tbody tr:nth-child(even) {
+  background: var(--background-secondary-alt);
+}
+.scf-table tbody tr:hover {
+  background: var(--background-modifier-hover);
+}
+
+/* === 성경사전 뷰 (Bible Dictionary View) 전용 스타일 === */
+.scf-dict-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--background-primary);
+  color: var(--text-normal);
+}
+.scf-dict-head {
+  padding: 10px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex-shrink: 0;
+  box-sizing: border-box;
+}
+.scf-dict-search-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.scf-dict-search-input {
+  flex: 1;
+  min-width: 0;
+  height: 30px;
+  padding: 0 10px;
+  font-size: 13px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  background: var(--background-primary);
+  color: var(--text-normal);
+  box-sizing: border-box;
+}
+.scf-dict-search-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+.scf-dict-clear-btn {
+  height: 30px;
+  padding: 0 10px;
+  font-size: 12px;
+  background: var(--background-modifier-hover);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text-muted);
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.scf-dict-clear-btn:hover {
+  background: var(--background-modifier-active-hover);
+  color: var(--text-normal);
+}
+
+/* 초성 바로가기 버튼 바 */
+.scf-dict-chosung-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  align-items: center;
+}
+.scf-dict-chosung-btn {
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-muted);
+  cursor: pointer;
+  line-height: 1.2;
+}
+.scf-dict-chosung-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.scf-dict-chosung-btn.active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent, #ffffff);
+  border-color: var(--interactive-accent);
+  font-weight: 600;
+}
+
+/* 상태 바 및 에디터 연동 */
+.scf-dict-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 11px;
+  color: var(--text-muted);
+  gap: 8px;
+}
+.scf-dict-count-label {
+  font-weight: 500;
+}
+.scf-dict-sync-btn {
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.scf-dict-sync-btn:hover {
+  color: var(--text-normal);
+  border-color: var(--interactive-accent);
+}
+.scf-dict-sync-btn.active {
+  background: var(--interactive-accent);
+  color: #ffffff;
+  border-color: var(--interactive-accent);
+}
+
+/* 2단 분할 컨테이너 */
+.scf-dict-split-container {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+.scf-dict-list-panel {
+  width: 240px;
+  min-width: 180px;
+  max-width: 320px;
+  border-right: 1px solid var(--background-modifier-border);
+  overflow-y: auto;
+  background: var(--background-secondary);
+}
+.scf-dict-item {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.scf-dict-item:hover {
+  background: var(--background-modifier-hover);
+}
+.scf-dict-item.active {
+  background: #d35400 !important;
+  color: #ffffff !important;
+  font-weight: 600;
+}
+.scf-dict-item.active .scf-dict-item-sub,
+.scf-dict-item.active .scf-dict-item-title {
+  color: #ffffff !important;
+}
+.scf-dict-item-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scf-dict-item-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.scf-dict-item-sub {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* 우측 상세 패널 */
+.scf-dict-detail-panel {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 16px 20px;
+  background: var(--background-primary);
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+.scf-dict-detail-head {
+  border-bottom: 2px solid var(--background-modifier-border);
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.scf-dict-detail-title-area {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.scf-dict-detail-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-normal);
+}
+.scf-dict-detail-sub {
+  font-size: 14px;
+  color: var(--text-muted);
+}
+.scf-dict-action-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.scf-dict-font-group {
+  display: inline-flex;
+  align-items: center;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 2px 4px;
+}
+.scf-dict-font-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+}
+.scf-dict-font-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.scf-dict-font-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 0 4px;
+  user-select: none;
+}
+.scf-dict-btn {
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+.scf-dict-btn:hover {
+  background: var(--background-modifier-hover);
+  border-color: var(--interactive-accent);
+}
+
+/* 본문 텍스트 및 장절 링크 */
+.scf-dict-detail-body {
+  font-size: inherit !important;
+  line-height: 1.75;
+  color: var(--text-normal);
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+.scf-dict-text p {
+  margin-bottom: 12px;
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+.scf-dict-source-badge {
+  display: inline-block;
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--text-accent, #2563eb);
+  margin-top: 14px;
+  margin-bottom: 6px;
+  padding: 3px 8px;
+  background: var(--background-modifier-hover);
+  border-radius: 4px;
+  border-left: 3px solid var(--interactive-accent);
+  letter-spacing: -0.2px;
+}
+.scf-dict-verse-link {
+  color: var(--interactive-accent);
+  background: rgba(var(--interactive-accent-rgb, 120, 100, 200), 0.1);
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: all 0.15s ease;
+}
+.scf-dict-verse-link:hover {
+  background: var(--interactive-accent);
+  color: #ffffff;
+}
+
+/* 성경 구절 팝오버 (가볍고 빠른 툴팁) */
+.scf-verse-popover {
+  position: fixed;
+  z-index: 10000;
+  max-width: 440px;
+  min-width: 280px;
+  max-height: 380px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border-hover, var(--background-modifier-border));
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: scfPopFadeIn 0.15s ease-out;
+}
+@keyframes scfPopFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.scf-verse-pop-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 12px;
+  background: var(--background-secondary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.scf-verse-pop-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--interactive-accent);
+}
+.scf-verse-pop-actions {
+  display: flex;
+  gap: 4px;
+}
+.scf-verse-pop-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+.scf-verse-pop-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.scf-verse-pop-body {
+  padding: 12px 14px;
+  overflow-y: auto;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--text-normal);
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+.scf-verse-pop-line {
+  margin-bottom: 6px;
+}
+.scf-verse-pop-line:last-child {
+  margin-bottom: 0;
+}
+.scf-verse-pop-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 13px;
+}
+
+/* 모바일 및 좁은 화면 반응형 */
+@container (max-width: 420px) {
+  .scf-dict-split-container {
+    flex-direction: column !important;
+  }
+  .scf-dict-list-panel {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 180px !important;
+    border-right: none !important;
+    border-bottom: 2px solid var(--background-modifier-border) !important;
+  }
+}

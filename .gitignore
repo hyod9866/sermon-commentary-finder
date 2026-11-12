@@ -1,0 +1,10 @@
+# Local runtime data
+data/
+commentary-data.zip
+data.json
+
+# System & temporary files
+.DS_Store
+*.bak*
+*.tmp
+__pycache__/

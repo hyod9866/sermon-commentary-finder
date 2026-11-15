@@ -1,7 +1,7 @@
 {
   "id": "sermon-commentary-finder",
   "name": "주석 찾기 (Commentary Finder)",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "minAppVersion": "1.4.0",
   "description": "성경 장절별 고품질 종합주석(그랜드, 호크마, 매튜헨리, 스펄전, 메킨토시 등) 검색 및 열람 플러그인",
   "author": "HG. Kang",

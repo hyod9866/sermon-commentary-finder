@@ -8,7 +8,7 @@
  * ------------------------------------------------------------------ */
 'use strict';
 
-const { Plugin, ItemView, Notice, PluginSettingTab, Setting, setIcon, MarkdownView, MarkdownRenderer, requestUrl } = require('obsidian');
+const { Plugin, ItemView, Notice, PluginSettingTab, Setting, setIcon, MarkdownView, MarkdownRenderer, requestUrl, Platform } = require('obsidian');
 
 const VIEW_TYPE = 'sermon-commentary-view';
 const VIEW_TYPE_DICT = 'sermon-bible-dictionary-view';
@@ -2862,6 +2862,7 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
 
     const localChapterPath = `${this.manifest.dir}/data/chapters/b${bStr}-${chNum}.json`;
     const localLegacyPath = `${this.manifest.dir}/data/b${bStr}.json`;
+    const isMobile = !!(Platform && Platform.isMobile);
 
     // 1. 로컬 장 캐시 파일 확인 (최신 해시와 일치하거나 매니페스트 없을 때)
     if (!isStale) {
@@ -2878,17 +2879,19 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
       }
     }
 
-    // 2. PC 호환용 전체 권 JSON (data/b{NN}.json) 확인
-    try {
-      if (await this.app.vault.adapter.exists(localLegacyPath)) {
-        const legacyData = await this.loadBookData(b);
-        if (legacyData) return legacyData;
+    // 2. PC 데스크톱은 로컬 전체 권 JSON(data/b{NN}.json)을 우선 사용
+    if (!isMobile) {
+      try {
+        if (await this.app.vault.adapter.exists(localLegacyPath)) {
+          const legacyData = await this.loadBookData(b);
+          if (legacyData) return legacyData;
+        }
+      } catch (e) {
+        // 무시 후 원격 시도
       }
-    } catch (e) {
-      // 무시 후 원격 시도
     }
 
-    // 3. GitHub에서 해당 장 JSON만 온디맨드 다운로드
+    // 3. GitHub에서 해당 장 JSON만 온디맨드 다운로드 (모바일에서는 구형 Sync 잔존 파일보다 항상 우선)
     const remoteRel = (manifestEntry && manifestEntry.f) ? manifestEntry.f : `chapters/b${bStr}-${chNum}.json`;
     try {
       const { data, rawText } = await this.fetchRawJson(remoteRel, 25000);
@@ -2908,7 +2911,7 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
       console.warn('[주석 찾기] 원격 장 다운로드 실패:', remoteRel, e);
     }
 
-    // 4. 오프라인 fallback: 만료되었더라도 로컬 장 파일이 있으면 반환
+    // 4. 오프라인 fallback: 만료된 장 캐시 또는 (모바일 오프라인 시) 로컬 전체 권 JSON 사용
     try {
       if (await this.app.vault.adapter.exists(localChapterPath)) {
         const raw = await this.app.vault.adapter.read(localChapterPath);
@@ -2916,6 +2919,10 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
         if (data) data._isChapterOnly = true;
         this._setChapterCache(cacheKey, data);
         return data;
+      }
+      if (isMobile && await this.app.vault.adapter.exists(localLegacyPath)) {
+        const legacyData = await this.loadBookData(b);
+        if (legacyData) return legacyData;
       }
     } catch (e) {
       // 무시
@@ -2954,6 +2961,10 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
         if (invalidated > 0) await this.saveSettings();
       }
 
+      if (Platform && Platform.isMobile) {
+        await this._cleanupMobileLegacyBookFiles();
+      }
+
       if (showNotice) {
         new Notice(`동기화 완료: ${remote.count || Object.keys(remote.chapters).length}개 장 최신화 (갱신된 캐시 ${invalidated}건 정리)`);
       }
@@ -2965,8 +2976,31 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     }
   }
 
+  async _cleanupMobileLegacyBookFiles() {
+    if (!(Platform && Platform.isMobile)) return 0;
+    let removed = 0;
+    const dataDir = `${this.manifest.dir}/data`;
+    try {
+      if (await this.app.vault.adapter.exists(dataDir)) {
+        const listed = await this.app.vault.adapter.list(dataDir);
+        const files = (listed && listed.files) ? listed.files : [];
+        for (const f of files) {
+          const base = f.split('/').pop();
+          if (/^b\d{2}\.json$/i.test(base)) {
+            await this.app.vault.adapter.remove(f);
+            removed++;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[주석 찾기] 모바일 구형 데이터 정리 실패', e);
+    }
+    return removed;
+  }
+
   async clearChapterCache() {
     this._chapterCache.clear();
+    this._bookCache.clear();
     let removed = 0;
     const chaptersDir = `${this.manifest.dir}/data/chapters`;
     try {
@@ -2982,6 +3016,9 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
       }
     } catch (e) {
       console.warn('[주석 찾기] 캐시 파일 삭제 실패', e);
+    }
+    if (Platform && Platform.isMobile) {
+      removed += await this._cleanupMobileLegacyBookFiles();
     }
     this.settings.chapterHashes = {};
     await this.saveSettings();

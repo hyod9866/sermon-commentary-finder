@@ -378,17 +378,62 @@
   line-height: 1.82 !important;
   margin-bottom: 0.85em;
 }
-.scf-fulltext h1,
-.scf-fulltext h2,
-.scf-fulltext h3,
+.scf-fulltext h1 {
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.42) !important;
+  font-weight: 800 !important;
+  color: var(--text-normal) !important;
+  margin: 1.4em 0 0.7em !important;
+  padding-bottom: 0.35em !important;
+  border-bottom: 2px solid var(--interactive-accent, #2563eb) !important;
+  line-height: 1.38 !important;
+}
+.scf-fulltext h2 {
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.28) !important;
+  font-weight: 800 !important;
+  color: var(--interactive-accent, #2563eb) !important;
+  margin: 1.4em 0 0.65em !important;
+  padding: 6px 10px !important;
+  background: var(--background-secondary, rgba(128, 128, 128, 0.08)) !important;
+  border-left: 4px solid var(--interactive-accent, #2563eb) !important;
+  border-radius: 4px !important;
+  line-height: 1.4 !important;
+}
+.scf-fulltext h3 {
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.18) !important;
+  font-weight: 800 !important;
+  color: var(--text-normal) !important;
+  margin: 1.25em 0 0.55em !important;
+  line-height: 1.42 !important;
+}
 .scf-fulltext h4,
 .scf-fulltext strong.scf-heading {
-  font-size: calc(var(--scf-font-size, 15px) * 1.25) !important; /* 본문보다 4px 크게 볼드 */
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.07) !important;
   font-weight: 700 !important;
-  color: var(--text-accent, var(--text-normal)) !important;
+  color: var(--text-accent, #2563eb) !important;
   display: block;
-  margin-top: 1.2em;
-  margin-bottom: 0.6em;
+  margin: 1.05em 0 0.4em !important;
+  line-height: 1.45 !important;
+}
+.scf-fulltext p strong {
+  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-weight: 700 !important;
+  color: var(--text-normal) !important;
+}
+.scf-sermon-meta {
+  font-family: "Pretendard", "Freesentation", sans-serif !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.9) !important;
+  font-weight: 600 !important;
+  color: var(--text-muted) !important;
+  background: var(--background-secondary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: 6px !important;
+  padding: 6px 12px !important;
+  margin: 4px 0 14px !important;
+  text-align: right !important;
 }
 
 /* 절별 강해주석 시작 표제어 (고딕 볼드 + 볼드 파란색) */
@@ -622,7 +667,7 @@
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
 }
 .scf-chapter-badge {
-  font-size: 14px;
+  font-size: calc(var(--scf-font-size, 15px) * 0.92);
   font-weight: 700;
   color: var(--interactive-accent, #2563eb);
   letter-spacing: 2px;
@@ -630,7 +675,7 @@
   text-transform: uppercase;
 }
 .scf-chapter-name {
-  font-size: 20px;
+  font-size: calc(var(--scf-font-size, 15px) * 1.42);
   font-weight: 800;
   line-height: 1.45;
   color: var(--text-normal);
@@ -648,7 +693,7 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
 }
 .scf-passage-title {
-  font-size: 16px;
+  font-size: calc(var(--scf-font-size, 15px) * 1.08);
   font-weight: 800;
   color: var(--interactive-accent, #2563eb);
   margin-bottom: 10px;
@@ -656,18 +701,21 @@
   font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 .scf-passage-body {
-  font-size: 14.5px;
+  font-size: calc(var(--scf-font-size, 15px) * 0.96);
   line-height: 1.8;
   color: var(--text-normal);
+  font-family: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 /* 본문 & 자료노트 검은 음영 배지 (원어연구, 보감, 신학용어) */
 .scf-pill-black {
   background: #0f172a !important;
   color: #ffffff !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  font-family: "Pretendard", -apple-system, sans-serif !important;
   font-weight: 800 !important;
-  font-size: 11.5px !important;
-  padding: 2px 7px !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.8) !important;
+  padding: 2px 8px !important;
   border-radius: 4px !important;
   display: inline-block !important;
   margin-right: 6px !important;
@@ -679,12 +727,13 @@
 .scf-pill-gray {
   background: var(--background-modifier-border, #e2e8f0) !important;
   color: var(--text-normal, #1e293b) !important;
+  font-family: "Pretendard", -apple-system, sans-serif !important;
   font-weight: 700 !important;
-  font-size: 12px !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.88) !important;
   padding: 3px 9px !important;
   border-radius: 4px !important;
   display: inline-block !important;
-  margin: 10px 0 6px !important;
+  margin: 6px 6px 6px 0 !important;
 }
 
 /* 외울말씀 박스 (원본 책 테두리 박스 및 한영 대조) */
@@ -768,6 +817,27 @@
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
+}
+.scf-list-head-actions {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  flex-shrink: 0 !important;
+}
+.scf-collapse-all-btn {
+  font-size: 11px !important;
+  padding: 2px 7px !important;
+  border-radius: 4px !important;
+  color: var(--text-muted) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  background: var(--background-secondary) !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease-in-out !important;
+  flex-shrink: 0 !important;
+}
+.scf-collapse-all-btn:hover {
+  color: var(--interactive-accent, #2563eb) !important;
+  border-color: var(--interactive-accent, #2563eb) !important;
 }
 .scf-toggle-scope-btn {
   font-size: 11px !important;
@@ -1748,4 +1818,330 @@ button.scf-list-item,
   background-color: #ffffff !important;
   background: #ffffff !important;
   color: #1e293b !important;
+}
+
+/* ============================================================
+   그랜드 종합주석 66권 통일 문장서식 표준 (원본 인쇄본 기준: 명조 본문 + 고딕/색상/크기 6계층 위계)
+   ============================================================ */
+.scf-view {
+  --scf-serif: "KoPubWorldBatang", "Noto Serif KR", "RIDIBatang", "Nanum Myeongjo", "Batang", Georgia, serif;
+  --scf-gothic: "Pretendard", "Freesentation", "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --scf-h1-color: #0f172a;
+  --scf-h2-color: #1e3a8a;
+  --scf-h2-bg: #eff6ff;
+  --scf-h2-rule: #1e293b;
+  --scf-h3-color: #1e293b;
+  --scf-h4-color: #0369a1;
+  --scf-verse-color: #1d4ed8;
+  --scf-gothic-inline: #0f172a;
+  --scf-pill-bg: #0f172a;
+  --scf-pill-fg: #ffffff;
+  --scf-cit-color: #1e40af;
+  --scf-kw-bg: rgba(37, 99, 235, 0.1);
+  --scf-kw-fg: #1d4ed8;
+}
+.theme-dark .scf-view {
+  --scf-h1-color: #f8fafc;
+  --scf-h2-color: #93c5fd;
+  --scf-h2-bg: rgba(30, 58, 138, 0.28);
+  --scf-h2-rule: #64748b;
+  --scf-h3-color: #e2e8f0;
+  --scf-h4-color: #38bdf8;
+  --scf-verse-color: #60a5fa;
+  --scf-gothic-inline: #f8fafc;
+  --scf-pill-bg: #334155;
+  --scf-pill-fg: #f8fafc;
+  --scf-cit-color: #93c5fd;
+  --scf-kw-bg: rgba(96, 165, 250, 0.18);
+  --scf-kw-fg: #93c5fd;
+}
+
+/* 0. 일반 본문(명조체) — 고딕 제목·강조와 글꼴 자체부터 명확히 대비 */
+.scf-fulltext.scf-grand-article,
+.scf-fulltext.scf-grand-article p,
+.scf-fulltext.scf-grand-article li,
+.scf-fulltext.scf-grand-article .scf-passage-body,
+.scf-fulltext.scf-grand-article .scf-crossref-body,
+.scf-fulltext.scf-grand-article .scf-qt-body,
+.scf-fulltext.scf-grand-article .scf-maxim-quote {
+  font-family: var(--scf-serif) !important;
+  font-size: var(--scf-font-size, 15px) !important;
+  line-height: 1.88 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--text-normal) !important;
+}
+
+/* Tier 1. 장 / 서론 대제목 Hero */
+.scf-grand-article .scf-chapter-hero-title {
+  border-top: 3.5px solid var(--scf-h2-color) !important;
+  border-bottom: 1.5px solid var(--background-modifier-border) !important;
+  margin: 10px 0 22px !important;
+  padding: 18px 20px !important;
+}
+.scf-grand-article .scf-chapter-badge {
+  font-family: var(--scf-gothic) !important;
+  color: var(--scf-h2-color) !important;
+}
+.scf-grand-article .scf-chapter-name {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.48) !important;
+  font-weight: 800 !important;
+  color: var(--scf-h1-color) !important;
+}
+
+/* 도입 고딕 라벨 (구속사적 개관 :) */
+.scf-pill-intro {
+  display: inline-block !important;
+  font-family: var(--scf-gothic) !important;
+  font-weight: 800 !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.94) !important;
+  color: var(--scf-h2-color) !important;
+  background: var(--scf-h2-bg) !important;
+  border: 1px solid var(--scf-h2-color) !important;
+  padding: 1px 8px !important;
+  border-radius: 4px !important;
+  margin-right: 6px !important;
+}
+
+/* Tier 2. 대섹션(대단원) 제목 — 스크롤 중 대단원 전환 즉시 인지 */
+.scf-fulltext.scf-grand-article h2 {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.32) !important;
+  font-weight: 800 !important;
+  color: var(--scf-h2-color) !important;
+  background: var(--scf-h2-bg) !important;
+  border-left: 5px solid var(--scf-h2-color) !important;
+  border-bottom: 2px solid var(--scf-h2-rule) !important;
+  border-radius: 4px 4px 0 0 !important;
+  padding: 8px 14px !important;
+  margin: 1.6em 0 0.9em !important;
+  line-height: 1.38 !important;
+}
+.scf-fulltext.scf-grand-article > h2:first-child {
+  margin-top: 0.2em !important;
+}
+
+/* Tier 3. 대제목 / 주제 (설교 제목, 연구자료 인물 제목 등) */
+.scf-fulltext.scf-grand-article h3 {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.18) !important;
+  font-weight: 800 !important;
+  color: var(--scf-h3-color) !important;
+  margin: 1.5em 0 0.6em !important;
+  line-height: 1.42 !important;
+}
+.scf-fulltext.scf-grand-article h3.scf-topic-hero {
+  text-align: center !important;
+  padding: 10px 12px 10px !important;
+  border-top: 1px solid var(--background-modifier-border) !important;
+  border-bottom: 2px solid var(--scf-h3-color) !important;
+  background: var(--background-secondary) !important;
+  border-radius: 4px !important;
+  margin: 1.7em 0 0.7em !important;
+}
+
+/* 설교 / 예화 메타 칩 바 */
+.scf-grand-article .scf-sermon-meta {
+  font-family: var(--scf-gothic) !important;
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: flex-end !important;
+  gap: 8px 14px !important;
+  padding: 7px 12px !important;
+  margin: 0 0 16px !important;
+}
+.scf-meta-chip {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 5px !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.88) !important;
+}
+.scf-meta-k {
+  font-weight: 700 !important;
+  color: var(--scf-h4-color) !important;
+}
+.scf-meta-v {
+  font-weight: 600 !important;
+  color: var(--text-normal) !important;
+}
+
+/* Tier 4. 중제목 / 대지 / 번호 소제목 / 관주·예화 제목 */
+.scf-fulltext.scf-grand-article h4 {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.08) !important;
+  font-weight: 700 !important;
+  color: var(--scf-h4-color) !important;
+  margin: 1.35em 0 0.45em !important;
+  padding-bottom: 3px !important;
+  border-bottom: 1px dashed var(--background-modifier-border) !important;
+  line-height: 1.45 !important;
+}
+
+/* Tier 5a. 절별 강해주석 시작 표제 (18:1 바울이 아덴을 떠나.) */
+.scf-grand-article .scf-verse-head {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.1) !important;
+  font-weight: 800 !important;
+  color: var(--scf-verse-color) !important;
+  border-left: 3.5px solid var(--scf-verse-color) !important;
+  padding-left: 9px !important;
+  margin: 1.55em 0 0.35em !important;
+  line-height: 1.42 !important;
+}
+
+/* Tier 5b. 문단 내 고딕 볼드 어구 (**고린도에 이르러.**, **본도.** 등 — 명조 본문 위 선명한 고딕 대비) */
+.scf-fulltext.scf-grand-article p strong,
+.scf-fulltext.scf-grand-article li strong,
+.scf-fulltext.scf-grand-article .scf-passage-body strong {
+  font-family: var(--scf-gothic) !important;
+  font-weight: 700 !important;
+  color: var(--scf-gothic-inline) !important;
+  letter-spacing: -0.015em !important;
+}
+
+/* Tier 5c. 검은 음영 반전 배지 헤더 ([도표], [원어연구], [인물연구] 등) */
+.scf-badge-head {
+  display: flex !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 8px !important;
+  margin: 1.45em 0 0.55em !important;
+  padding-bottom: 4px !important;
+  border-bottom: 1px solid var(--background-modifier-border) !important;
+}
+.scf-grand-article .scf-pill-black {
+  background: var(--scf-pill-bg) !important;
+  color: var(--scf-pill-fg) !important;
+  font-family: var(--scf-gothic) !important;
+  font-weight: 800 !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.82) !important;
+  padding: 2px 9px !important;
+  margin-right: 0 !important;
+}
+.scf-badge-title {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.05) !important;
+  font-weight: 800 !important;
+  color: var(--scf-h3-color) !important;
+}
+
+/* Tier 6a. 강해주석 단락 해설 박스 */
+.scf-grand-article .scf-passage-box {
+  border: 1.5px solid var(--scf-h4-color) !important;
+  border-left: 5px solid var(--scf-h4-color) !important;
+  margin: 16px 0 22px !important;
+}
+.scf-grand-article .scf-passage-title {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.08) !important;
+  font-weight: 800 !important;
+  color: var(--scf-h4-color) !important;
+  text-align: center !important;
+  padding-bottom: 8px !important;
+  border-bottom: 1px dashed var(--background-modifier-border) !important;
+}
+
+/* Tier 6b. 핵심 성구 관주 2열 정렬 & 〈키워드〉 강조 */
+.scf-crossref-row {
+  display: flex !important;
+  align-items: baseline !important;
+  gap: 12px !important;
+  margin: 4px 0 !important;
+  padding: 2px 0 !important;
+}
+.scf-crossref-cit {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.92) !important;
+  font-weight: 700 !important;
+  color: var(--scf-cit-color) !important;
+  min-width: 78px !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+.scf-crossref-body {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+}
+.scf-crossref-kw {
+  font-family: var(--scf-gothic) !important;
+  font-weight: 700 !important;
+  color: var(--scf-kw-fg) !important;
+  background: var(--scf-kw-bg) !important;
+  padding: 0 3px !important;
+  border-radius: 3px !important;
+}
+
+/* Tier 6c. Q·T 제목 & 금언 정렬 */
+.scf-qt-item {
+  margin: 1.1em 0 0.25em !important;
+  line-height: 1.85 !important;
+}
+.scf-qt-badge {
+  display: inline-block !important;
+  font-family: var(--scf-gothic) !important;
+  font-weight: 800 !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.92) !important;
+  color: #ffffff !important;
+  background: var(--scf-verse-color) !important;
+  padding: 1px 8px !important;
+  border-radius: 4px !important;
+  margin-right: 7px !important;
+  vertical-align: baseline !important;
+}
+.scf-qt-refs {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.88) !important;
+  font-weight: 600 !important;
+  color: var(--scf-h4-color) !important;
+  padding-left: 6px !important;
+  margin-bottom: 1em !important;
+}
+.scf-maxim-row {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: baseline !important;
+  gap: 6px !important;
+  margin: 0.7em 0 !important;
+}
+.scf-maxim-bullet {
+  color: var(--scf-verse-color) !important;
+  font-weight: 800 !important;
+  flex-shrink: 0 !important;
+}
+.scf-maxim-quote {
+  flex: 1 1 240px !important;
+}
+.scf-maxim-src {
+  font-family: var(--scf-gothic) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.88) !important;
+  font-weight: 600 !important;
+  color: var(--text-muted) !important;
+  margin-left: auto !important;
+  white-space: nowrap !important;
+}
+
+/* 도표(.scf-table) 고딕 헤더 + 명조 셀 대비 */
+.scf-grand-article .scf-table thead th {
+  font-family: var(--scf-gothic) !important;
+  font-weight: 700 !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.94) !important;
+}
+.scf-grand-article .scf-table td {
+  font-family: var(--scf-serif) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 0.94) !important;
+}
+
+/* 장절 검색 일치 하이라이트 */
+.scf-list-item.is-verse-match:not(.is-active) {
+  background: rgba(37, 99, 235, 0.08) !important;
+  border-color: rgba(37, 99, 235, 0.28) !important;
+}
+.scf-list-item.is-verse-match:not(.is-active) .scf-list-ref {
+  color: var(--interactive-accent, #2563eb) !important;
+  font-weight: 700 !important;
+}
+.scf-verse-target-flash {
+  background: rgba(250, 204, 21, 0.24) !important;
+  border-radius: 4px !important;
+  padding: 1px 4px !important;
 }

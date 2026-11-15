@@ -8,7 +8,7 @@
  * ------------------------------------------------------------------ */
 'use strict';
 
-const { Plugin, ItemView, Notice, PluginSettingTab, Setting, setIcon, MarkdownView, MarkdownRenderer } = require('obsidian');
+const { Plugin, ItemView, Notice, PluginSettingTab, Setting, setIcon, MarkdownView, MarkdownRenderer, requestUrl } = require('obsidian');
 
 const VIEW_TYPE = 'sermon-commentary-view';
 const VIEW_TYPE_DICT = 'sermon-bible-dictionary-view';
@@ -70,6 +70,9 @@ const DEFAULT_SETTINGS = {
   geminiApiKey: '',           // 비어있으면 sermon-mindmap의 API 키 자동 공유
   readerFontSize: 15,         // 본문 기본 폰트 크기 (px)
   rootOverrides: {},          // 주석 폴더를 옮겼을 때 새 경로 (source id → 경로)
+  dataRepo: 'hyod9866/sermon-commentary-data', // 장 단위 주석 데이터 원격 저장소
+  dataBranch: 'main',
+  chapterHashes: {},
 };
 
 /**
@@ -293,11 +296,172 @@ function cleanSnippet(s) {
   return s;
 }
 
+function getEntryDomKey(e) {
+  if (!e) return '';
+  return `${e[4]}_${e[5]}_${e[6]}_${e[7]}`;
+}
+
+function getEntryCorrected(e, bookData) {
+  if (!e || !bookData || !bookData.corrected) return '';
+  const domKey = getEntryDomKey(e);
+  if (bookData.corrected[domKey]) return bookData.corrected[domKey];
+  const legacyKey = `${e[4]}_${e[5]}_${e[6]}`;
+  return bookData.corrected[legacyKey] || '';
+}
+
+function formatEntryLabel(e, idx, plugin, includeTag = false) {
+  if (!e) return '';
+  const [b, ch, v1, v2, , , , ki] = e;
+  const kind = idx.kinds[ki] || (v1 === 0 ? '장 개관' : '');
+  const bName = getBookDisplayName(b, plugin);
+  const unit = b === 19 ? '편' : '장';
+  let label = '';
+  if (ch === 0) {
+    if (kind === '참고문헌') label = `${bName} 참고문헌`;
+    else if (kind === '개요') label = `${bName} 개요`;
+    else if (kind === '특별자료') label = `${bName} 서론 특별자료`;
+    else label = `${bName} 서론`;
+  } else if (v1 === 0 && (kind === '본문&자료노트' || kind === '강해주석' || kind === '연구자료')) {
+    label = `${bName} ${ch}${unit} ${kind}`;
+  } else if (v1 === 0) {
+    if (kind === '설교') label = `${bName} ${ch}${unit} 주제, 원어&교리설교`;
+    else if (kind === '핵심성구관주') label = `${bName} ${ch}${unit} 핵심성구관주`;
+    else if (kind === '예화') label = `${bName} ${ch}${unit} 예화`;
+    else if (kind === 'QT제목' || kind === 'Q·T 제목') label = `${bName} ${ch}${unit} Q·T 제목`;
+    else if (kind === '금언') label = `${bName} ${ch}${unit} 금언`;
+    else {
+      const kStr = (kind === '장 개관' || kind === '개관') ? '개관' : (kind || '개관');
+      label = `${bName} ${ch}${unit} ${kStr}`;
+    }
+  } else {
+    label = `${bName} ${ch}:${v1 === v2 ? v1 : `${v1}-${v2}`}`;
+  }
+  if (includeTag && kind && !label.includes(kind) && kind !== '장 개관' && kind !== '개관') {
+    return `${label} (${kind})`;
+  }
+  return label;
+}
+
+function isStructuredGrandMarkdown(text) {
+  if (!text) return false;
+  return /(?:^|\n)#{1,4}\s+/.test(text)
+    || /(?:^|\n):::(?:box|box-cont|meta)\b/.test(text)
+    || /【(?:도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강|구속사적\s*개관)】/.test(text);
+}
+
+function applyCrossRefLinksSafe(htmlOrMd) {
+  const refRe = /([1-3]?[가-힣]{1,8}\s*\d{1,3}(?:장|편)?(?:\s*[:：]\s*\d{1,3}(?:[-~]\d{1,3})?)?)\s*(?:장\s*|편\s*)?(?:자료노트|연구자료|주석)?\s*(?:를\s*)?참조(?:\s*하라)?/g;
+  return htmlOrMd.split(/(<[^>]+>)/g).map((seg, idx) => {
+    if (idx % 2 === 1) return seg;
+    return seg.replace(refRe, (match, p1) => {
+      const cleanRef = p1.replace(/\s+/g, ' ').trim();
+      return `<span class="scf-ref-link" data-ref="${cleanRef}">🔗 ${match}</span>`;
+    });
+  }).join('');
+}
+
+function formatStructuredGrandText(text) {
+  let res = text;
+  // 0. 관주 등 본문 내 <한글> 꺾쇠가 HTML 태그로 삼켜지지 않도록 전각 〈한글〉로 정규화 & 테이블 중복 태그 정리
+  res = res.replace(/<([가-힣][^>\n<]{0,24})>/g, '〈$1〉');
+  res = res.replace(/<\/tbody>\s*<\/tbody>/gi, '</tbody>');
+  // 잘못 H4로 묶인 강해주석 절 표제 복구
+  res = res.replace(
+    /^####\s*[•●]?\s*(\d{1,3})\s*[:：]\s*(\d{1,3}(?:\s*[-~]\s*\d{1,3})?)\s*[—\-–]?\s*\*\*([^*]+)\*\*[ \t]*(.*)$/gm,
+    (_, c, v, head, rest) => `**${c}:${v.replace(/\s+/g, '')} ${head.trim()}**${rest ? ' ' + rest.trim() : ''}`
+  );
+
+  // 1. 장 대제목 Hero (제N장 제목 및 서론 대제목 통일)
+  res = res.replace(/(?:^|\n)#\s*제\s*(\d{1,3})\s*([장편])\s+([^\n]+)/i, (m, chNum, chUnit, chTitle) => {
+    const cleanTitle = chTitle.replace(/\s+/g, ' ').trim();
+    return `\n\n<div class="scf-chapter-hero-title">\n  <div class="scf-chapter-badge">제 ${chNum} ${chUnit}</div>\n  <div class="scf-chapter-name">${cleanTitle}</div>\n</div>\n\n`;
+  });
+  res = res.replace(/(?:^|\n)#\s+([^\n]*서론[^\n]*)/i, (m, introTitle) => {
+    const cleanTitle = introTitle.replace(/\s+/g, ' ').trim();
+    return `\n\n<div class="scf-chapter-hero-title">\n  <div class="scf-chapter-badge">서 론</div>\n  <div class="scf-chapter-name">${cleanTitle}</div>\n</div>\n\n`;
+  });
+
+  // 2. 구속사적 개관 도입 배지
+  res = res.replace(/(?:\*\*)?【\s*구속사적\s*개관\s*】(?:\*\*)?\s*[:：]?/g, '<span class="scf-pill-intro">구속사적 개관</span> ');
+
+  // 3. 설교·예화 메타 바 (구분 | 본문 | 찬송 / 성구 칩 분리)
+  res = res.replace(/(?:^|\n):::meta\s+([^\n]+?)\s*:::/g, (m, meta) => {
+    const parts = meta.split('|').map(s => s.trim()).filter(Boolean);
+    const chips = parts.map(p => {
+      const idxColon = p.search(/[:：]/);
+      if (idxColon > 0) {
+        const k = p.slice(0, idxColon).trim();
+        const v = p.slice(idxColon + 1).trim();
+        return `<span class="scf-meta-chip"><span class="scf-meta-k">${k}</span><span class="scf-meta-v">${v}</span></span>`;
+      }
+      return `<span class="scf-meta-chip"><span class="scf-meta-v">${p}</span></span>`;
+    }).join('');
+    return `\n\n<div class="scf-sermon-meta">${chips}</div>\n\n`;
+  });
+
+  // 4. 강해주석 단락 해설 박스 (:::box ... :::)
+  res = res.replace(/(?:^|\n):::box(?:-cont)?(?:[ \t]+([^\n]*))?\n([\s\S]*?)\n:::/g, (m, title, body) => {
+    const cleanTitle = (title || '단락 해설').trim();
+    const cleanBody = body.trim();
+    return `\n\n<div class="scf-passage-box">\n  <div class="scf-passage-title">📌 ${cleanTitle}</div>\n  <div class="scf-passage-body">\n\n${cleanBody}\n\n</div>\n</div>\n\n`;
+  });
+
+  // 5. 검은 음영 반전 배지 헤더 (단독 행은 일체형 블록 헤더로, 인라인은 뱃지로)
+  res = res.replace(/^(?:\*\*)?【\s*(도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강)\s*】([^\n]*)$/gm, (m, tag, tail) => {
+    const t = tail.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim().replace(/^[-–—:]\s*/, '');
+    return t
+      ? `<div class="scf-badge-head"><span class="scf-pill-black">${tag}</span><span class="scf-badge-title">${t}</span></div>`
+      : `<div class="scf-badge-head"><span class="scf-pill-black">${tag}</span></div>`;
+  });
+  res = res.replace(/(?:\*\*)?【\s*(도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강)\s*】([^*<\n]*)(?:\*\*)?/g, (m, tag, tail) => {
+    const t = tail.trim().replace(/^[-–—:]\s*/, '');
+    return t ? `<span class="scf-pill-black">${tag}</span> **${t}**` : `<span class="scf-pill-black">${tag}</span>`;
+  });
+
+  // 6. 핵심 성구 관주 2열 정렬 행 (`신 4:29  그러나 네가...`) & 강조 키워드 `〈...〉`
+  if (/##\s*핵심\s*성구\s*관주/.test(res)) {
+    res = res.replace(
+      /^((?:창|출|레|민|신|수|삿|룻|삼[상하]|왕[상하]|대상|대하|스|느|에|욥|시|잠|전|아|사|렘|애|겔|단|호|욜|암|옵|욘|미|나|합|습|학|슥|말|마|막|눅|요(?:일|이|삼|[123])?|행|롬|고[전후]|갈|엡|빌|골|살[전후]|딤[전후]|딛|몬|히|약|벧[전후]|유|계)\s*\d{1,3}\s*[:：]\s*\d{1,3}(?:\s*[-~,]\s*\d{1,3})?)\s+([^\n]+)$/gm,
+      (m, cit, body) => {
+        const cleanCit = cit.replace(/\s*[:：]\s*/g, ':').replace(/\s+/g, ' ').trim();
+        const highlighted = body.replace(/〈([^〉]+)〉/g, '<span class="scf-crossref-kw">〈$1〉</span>');
+        return `<div class="scf-crossref-row"><span class="scf-crossref-cit">${cleanCit}</span><span class="scf-crossref-body">${highlighted}</span></div>`;
+      }
+    );
+  }
+
+  // 7. Q·T 제목 각 절 배지 (`**18:3** ...`) 및 참고구절 (`● 고전 4:12 ...`) + 금언 (`● ... (출전)`)
+  if (/##\s*Q\s*[·.\-]?\s*T\s*제목/i.test(res)) {
+    res = res.replace(/(?:^|\n)\*\*(\d{1,3}\s*[:：]\s*[\d,\s\-~]+)\*\*[ \t]+([^\n]+)/g, (m, ref, body) => {
+      return `\n<div class="scf-qt-item"><span class="scf-qt-badge">${ref.replace(/\s*[:：]\s*/g, ':').trim()}</span><span class="scf-qt-body">${body}</span></div>`;
+    });
+    res = res.replace(/(?:^|\n)●\s*([^\n]+)/g, (m, refs) => `\n<div class="scf-qt-refs">● ${refs.trim()}</div>`);
+  }
+  if (/##\s*금\s*언/.test(res)) {
+    res = res.replace(/(?:^|\n)●\s*([^\n]+?)\s*(\([^()\n]{2,40}\))\s*$/gm, (m, quote, src) => {
+      return `\n<div class="scf-maxim-row"><span class="scf-maxim-bullet">●</span><span class="scf-maxim-quote">${quote.trim()}</span><span class="scf-maxim-src">${src}</span></div>`;
+    });
+  }
+
+  // 8. 강해주석 절 시작 고딕 볼드 표제 (**18:1 바울이 아덴을 떠나.** / **18:25 일찍 주의 도를…가르치나.**)
+  res = res.replace(/(?:^|\n)\*\*(\d{1,3}\s*[:：]\s*\d{1,3}(?:\s*[-~]\s*\d{1,3})?\s+[^\s*][^*\n]*?)\*\*[ \t]*/g, (m, heading) => {
+    const cleanH = heading.replace(/\s*[:：]\s*/g, ':').trim();
+    return `\n\n<div class="scf-verse-head">${cleanH}</div>\n\n`;
+  });
+
+  // 9. 상호참조 링크 (HTML 태그 속성 밖에서만 치환)
+  res = applyCrossRefLinksSafe(res);
+  return res.replace(/\n{3,}/g, '\n\n').trim();
+}
+
 /**
  * 주석 텍스트 전처리: QoT 제목을 가독성 높은 QT 제목으로 교체하고 단락 줄바꿈을 정돈합니다.
  */
 function formatCommentaryText(text) {
   if (!text) return '';
+  if (isStructuredGrandMarkdown(text)) {
+    return formatStructuredGrandText(text);
+  }
 
   let res = text;
 
@@ -392,6 +556,9 @@ function formatCommentaryText(text) {
  */
 function unwrapCommentary(text) {
   if (!text) return '';
+  if (isStructuredGrandMarkdown(text)) {
+    return formatCommentaryText(text);
+  }
   // 1. 방해되는 쪽 구분 태그나 단순 페이지 번호 줄 사전 정돈
   text = text.replace(/(?:^|\n)\s*\[\s*\d{1,4}\s*쪽\s*\]\s*(?=\n|$)/g, '\n');
   text = text.replace(/(?:^|\n)\s*---\s*\[페이지 구분\]\s*---\s*(?=\n|$)/g, '\n');
@@ -747,12 +914,19 @@ class CommentaryView extends ItemView {
       const bookEntries = (this.plugin.bookLookup ? this.plugin.bookLookup.get(r.b) : null) || (idx.entries.filter(e => e[0] === r.b));
       const target = findBestEntry(bookEntries, r, idx);
       if (target) {
-        const cardKey = `${target[4]}_${target[5]}_${target[6]}`;
+        const cardKey = getEntryDomKey(target);
         const row = this.resultsEl.querySelector(`.scf-list-item[data-card-key="${cardKey}"]`);
         if (row) {
+          this.resultsEl.querySelectorAll('.scf-list-item').forEach((item) => {
+            const be = item._entry;
+            const hit = !!(be && r.v1 > 0 && be[1] === r.ch && be[2] > 0 && be[2] <= r.v2 && be[3] >= r.v1);
+            item.classList.toggle('is-verse-match', hit);
+          });
+          const grp = row.closest('.scf-src-group');
+          if (grp && typeof grp._setOpen === 'function') grp._setOpen(true);
           this.lastSelectedKey = cardKey;
           this.current = r;
-          this._selectItem(target, row);
+          this._selectItem(target, row, true);
           const listPanel = this.resultsEl.querySelector('.scf-list-panel');
           setTimeout(() => {
             scrollPanelToItem(listPanel, row, 'center');
@@ -797,12 +971,12 @@ class CommentaryView extends ItemView {
     // 사용자가 찾고자 한 장절(r)과 가장 잘 맞는 항목을 점수제로 스마트 탐색
     const defaultTarget = findBestEntry(bookEntries, r, idx);
 
-    // 해당 책 텍스트 데이터 비동기 로드
+    // 해당 책/장 텍스트 데이터 비동기 로드 (장 단위 분할 파일 우선 + PC 통파일 fallback + 원격 온디맨드 자동 받기)
     let bookData = null;
     try {
-      bookData = await this.plugin.loadBookData(r.b);
+      bookData = await this.plugin.loadChapterData(r.b, r.ch);
     } catch (err) {
-      console.error('loadBookData failed', err);
+      console.error('loadChapterData failed', err);
     }
 
     // 비동기 로딩 도중 다른 렌더링 요청이 들어왔다면 현재 렌더링 즉시 취소!
@@ -840,14 +1014,32 @@ class CommentaryView extends ItemView {
     const unit = r.b === 19 ? '편' : '장';
     const isShowingAll = !!this._showAllChapters;
 
-    // 좌측 상단 헤더: 현재 장/편 정보 및 전체 보기 토글 버튼
+    // 좌측 상단 헤더: 현재 장/편 정보, 모두 접기/펼치기, 전체 보기 토글 버튼
     const listHead = listPanel.createDiv({ cls: 'scf-list-head' });
     const headTitle = isShowingAll
       ? `📖 ${bName} 전체 ${unit}`
       : (r.ch === 0 ? `📖 ${bName} 서론` : `📖 ${bName} ${r.ch}${unit}`);
     listHead.createDiv({ cls: 'scf-list-head-title', text: headTitle });
 
-    const toggleScopeBtn = listHead.createEl('button', {
+    const headActions = listHead.createDiv({ cls: 'scf-list-head-actions' });
+    const groupControls = [];
+    const collapseAllBtn = headActions.createEl('button', {
+      cls: 'scf-mini-btn scf-collapse-all-btn',
+      text: '모두 접기',
+      title: '모든 주석서 목록을 한 번에 접거나 펼칩니다.'
+    });
+    const syncCollapseAllBtn = () => {
+      const anyOpen = groupControls.some(g => g.isOpen());
+      collapseAllBtn.setText(anyOpen ? '모두 접기' : '모두 펼치기');
+    };
+    collapseAllBtn.onclick = (ev) => {
+      ev.stopPropagation();
+      const anyOpen = groupControls.some(g => g.isOpen());
+      for (const g of groupControls) g.setOpen(!anyOpen);
+      syncCollapseAllBtn();
+    };
+
+    const toggleScopeBtn = headActions.createEl('button', {
       cls: 'scf-mini-btn scf-toggle-scope-btn',
       text: isShowingAll ? `${r.ch > 0 ? r.ch : 1}${unit}만 보기` : '전체 목록',
       title: isShowingAll ? `현재 ${unit} 항목만 집중해서 봅니다.` : `${bName} 전체 ${unit} 목록을 펼칩니다.`
@@ -858,44 +1050,34 @@ class CommentaryView extends ItemView {
       this.render(r);
     };
 
-    // 상단 이전 장/서론 내비게이션 버튼 (현재 장 집중 모드일 때 최상단 배치)
-    if (!isShowingAll) {
-      if (r.ch > 1) {
-        const prevChBtn = listPanel.createEl('button', {
-          cls: 'scf-chapter-nav-btn',
-          text: `⬆ 이전: ${bName} ${r.ch - 1}${unit} 보기`,
-          type: 'button'
-        });
-        prevChBtn.onclick = (ev) => {
-          ev.stopPropagation();
-          this.search(`${bName} ${r.ch - 1}${unit}`);
-        };
-      } else if (r.ch === 1) {
-        const introBtn = listPanel.createEl('button', {
-          cls: 'scf-chapter-nav-btn',
-          text: `⬆ ${bName} 서론 및 개요 보기`,
-          type: 'button'
-        });
-        introBtn.onclick = (ev) => {
-          ev.stopPropagation();
-          this.search(`${bName} 서론`);
-        };
-      }
+    // 상단 이전 장 내비게이션 버튼 (현재 장 집중 모드일 때 최상단 배치)
+    if (!isShowingAll && r.ch > 1) {
+      const prevChBtn = listPanel.createEl('button', {
+        cls: 'scf-chapter-nav-btn',
+        text: `⬆ 이전: ${bName} ${r.ch - 1}${unit} 보기`,
+        type: 'button'
+      });
+      prevChBtn.onclick = (ev) => {
+        ev.stopPropagation();
+        this.search(`${bName} ${r.ch - 1}${unit}`);
+      };
     }
 
     let firstEntry = null;
     let firstItemEl = null;
     let currentSelectedEntry = null;
 
-    const selectItem = (e, itemEl) => {
+    const selectItem = async (e, itemEl, forceReload = false) => {
       if (!e) return;
-      if (currentSelectedEntry === e && itemEl && itemEl.classList.contains('is-active')) {
+      if (!forceReload && currentSelectedEntry === e && itemEl && itemEl.classList.contains('is-active')) {
         return;
       }
       currentSelectedEntry = e;
-      this.lastSelectedKey = `${e[4]}_${e[5]}_${e[6]}`;
+      this.lastSelectedKey = getEntryDomKey(e);
       listPanel.querySelectorAll('.scf-list-item').forEach(el => el.classList.remove('is-active'));
       if (itemEl) {
+        const grp = itemEl.closest('.scf-src-group');
+        if (grp && typeof grp._setOpen === 'function') grp._setOpen(true);
         itemEl.classList.add('is-active');
         scrollPanelToItem(listPanel, itemEl, 'nearest');
       }
@@ -903,7 +1085,11 @@ class CommentaryView extends ItemView {
         const file = idx.files[e[4]];
         const sid = file ? file[0] : null;
         const sourceHits = sid ? bookEntries.filter((be) => idx.files[be[4]][0] === sid).sort((a, b) => a[5] - b[5] || a[6] - b[6] || a[1] - b[1] || a[2] - b[2]) : null;
-        this.renderReader(readerPanel, e, r, bookData, sourceHits, listPanel);
+        let entryData = bookData;
+        if (!entryData || (entryData._isChapterOnly && entryData.ch !== e[1])) {
+          entryData = await this.plugin.loadChapterData(e[0], e[1]);
+        }
+        this.renderReader(readerPanel, e, this.current || r, entryData, sourceHits, listPanel);
       } catch (err) {
         console.error('[Commentary Finder] renderReader error:', err);
         new Notice('주석 본문 로드 실패: ' + err.message);
@@ -935,15 +1121,10 @@ class CommentaryView extends ItemView {
       // 물리적 책 페이지(p1) 오름차순으로 완벽 정렬!
       allHits.sort((a, b) => a[5] - b[5] || a[6] - b[6] || a[1] - b[1] || a[2] - b[2]);
 
-      // 사용자 요청: 1장 검색 시 책 전체 서론, 개요, 특별자료, 참고문헌(ch===0)이 1장 항목 바로 위에 보여야 함!
       if (!isShowingAll) {
-        if (r.ch === 0 || r.ch === 1) {
-          const ch01Hits = allHits.filter(e => e[1] === 0 || e[1] === 1);
-          if (ch01Hits.length) allHits = ch01Hits;
-        } else {
-          const chHits = allHits.filter(e => e[1] === r.ch);
-          if (chHits.length) allHits = chHits;
-        }
+        const chHits = allHits.filter(e => e[1] === r.ch);
+        if (!chHits.length) continue;
+        allHits = chHits;
       }
 
       const group = listPanel.createDiv({ cls: 'scf-src-group' });
@@ -954,59 +1135,33 @@ class CommentaryView extends ItemView {
 
       const itemsBox = group.createDiv({ cls: 'scf-src-items' });
       let isGroupOpen = true;
-      summary.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        isGroupOpen = !isGroupOpen;
+      const setOpen = (open) => {
+        isGroupOpen = !!open;
         itemsBox.style.display = isGroupOpen ? 'flex' : 'none';
         summary.setText(`${isGroupOpen ? '▼' : '▶'} ${srcName} (${count})`);
+      };
+      group._setOpen = setOpen;
+      groupControls.push({ isOpen: () => isGroupOpen, setOpen });
+      summary.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        setOpen(!isGroupOpen);
+        syncCollapseAllBtn();
       });
 
       const createItemRow = (e) => {
-        const [b, ch, v1, v2, fi, p1, p2, ki] = e;
-        const kind = idx.kinds[ki] || (v1 === 0 ? '장 개관' : '');
-        const bName = getBookDisplayName(b, this.plugin);
-        const unit = b === 19 ? '편' : '장';
-
-        // 사용자 요청: 주석 왼쪽 창은 긴 설명/스니펫을 빼고 서론, 개요, 특별자료, 참고문헌, 장 개관, 본문&자료노트, 장절 깔끔하게 표시
-        let refText = '';
-        if (ch === 0) {
-          if (kind === '참고문헌') {
-            refText = `${bName} 참고문헌`;
-          } else if (kind === '개요') {
-            refText = `${bName} 개요`;
-          } else if (kind === '특별자료') {
-            refText = `${bName} 서론 특별자료`;
-          } else {
-            refText = `${bName} 서론`;
-          }
-        } else if (kind === '본문&자료노트') {
-          refText = `${bName} ${ch}${unit} 본문&자료노트`;
-        } else if (v1 === 0) {
-          if (kind === '설교') {
-            refText = `${bName} ${ch}${unit} 주제, 원어&교리설교`;
-          } else if (kind === '핵심성구관주') {
-            refText = `${bName} ${ch}${unit} 핵심성구관주`;
-          } else if (kind === '예화') {
-            refText = `${bName} ${ch}${unit} 예화`;
-          } else if (kind === '금언') {
-            refText = `${bName} ${ch}${unit} 금언`;
-          } else {
-            const kStr = (kind === '장 개관' || kind === '개관') ? '개관' : (kind || '개관');
-            refText = `${bName} ${ch}${unit} ${kStr}`;
-          }
-        } else {
-          refText = `${bName} ${ch}:${v1 === v2 ? v1 : `${v1}-${v2}`}`;
-        }
-
-        const isChapter = (v1 === 0 && (ch === 0 || kind === '장 개관' || kind === '개관'));
+        const [b, ch, , , , , , ki] = e;
+        const kind = idx.kinds[ki] || (e[2] === 0 ? '장 개관' : '');
+        const refText = formatEntryLabel(e, idx, this.plugin, false);
+        const isChapter = (e[2] === 0 && (ch === 0 || kind === '장 개관' || kind === '개관'));
+        const isVerseHit = !!(r && r.v1 > 0 && ch === r.ch && e[2] > 0 && e[2] <= r.v2 && e[3] >= r.v1);
 
         // 100% 클릭 보장을 위해 네이티브 button 태그로 생성
         const row = itemsBox.createEl('button', {
-          cls: 'scf-list-item' + (isChapter ? ' scf-list-item-chapter' : ''),
+          cls: 'scf-list-item' + (isChapter ? ' scf-list-item-chapter' : '') + (isVerseHit ? ' is-verse-match' : ''),
           type: 'button'
         });
         row._entry = e;
-        row.dataset.cardKey = `${e[4]}_${e[5]}_${e[6]}`;
+        row.dataset.cardKey = getEntryDomKey(e);
 
         // 오직 장절(골 3:5-11 등)만 표시하고 우측에 주석 구분 배지 배치
         row.createSpan({ cls: 'scf-list-ref', text: refText });
@@ -1087,7 +1242,7 @@ class CommentaryView extends ItemView {
       }
     }
     if (!targetEl && targetEntry) {
-      const targetCardKey = `${targetEntry[4]}_${targetEntry[5]}_${targetEntry[6]}`;
+      const targetCardKey = getEntryDomKey(targetEntry);
       targetEl = listPanel.querySelector(`.scf-list-item[data-card-key="${targetCardKey}"]`);
     }
 
@@ -1118,39 +1273,11 @@ class CommentaryView extends ItemView {
     const pr2 = e[10] || (b === 51 && fi === 50 && p2 >= 3 ? p2 + 306 : p2);
     const pgStr = isDigital ? '' : (pr2 > pr1 ? `${pr1}~${pr2}쪽` : `${pr1}쪽`);
 
-    let refStr = '';
-    if (ch === 0) {
-      if (kind === '참고문헌') {
-        refStr = `${bName} 참고문헌`;
-      } else if (kind === '개요') {
-        refStr = `${bName} 개요`;
-      } else if (kind === '특별자료') {
-        refStr = `${bName} 서론 특별자료`;
-      } else {
-        refStr = `${bName} 서론`;
-      }
-    } else if (kind === '본문&자료노트') {
-      refStr = `${bName} ${ch}${b === 19 ? '편' : '장'} 본문&자료노트`;
-    } else if (v1 === 0) {
-      if (kind === '설교') {
-        refStr = `${bName} ${ch}${b === 19 ? '편' : '장'} 주제, 원어&교리설교`;
-      } else if (kind === '핵심성구관주') {
-        refStr = `${bName} ${ch}${b === 19 ? '편' : '장'} 핵심성구관주`;
-      } else if (kind === '예화') {
-        refStr = `${bName} ${ch}${b === 19 ? '편' : '장'} 예화`;
-      } else if (kind === '금언') {
-        refStr = `${bName} ${ch}${b === 19 ? '편' : '장'} 금언`;
-      } else {
-        const kStr = (kind === '장 개관' || kind === '개관') ? '개관' : (kind || '개관');
-        refStr = `${bName} ${ch}${b === 19 ? '편' : '장'} ${kStr}`;
-      }
-    } else {
-      refStr = `${bName} ${ch}:${v1}${v2 !== v1 ? '-' + v2 : ''}`;
-    }
+    const refStr = formatEntryLabel(e, idx, this.plugin, false);
     const fname = file[1].split('/').pop().replace(/\.pdf$/i, '');
 
     // 1. 본문 데이터 준비 (다중 페이지는 문장 끊김 없이 유기적으로 연속 병합)
-    const cardKey = `${fi}_${p1}_${p2}`;
+    const cardKey = getEntryDomKey(e);
     let rawOcrText = '';
     if (bookData && bookData.pages) {
       const pgTexts = [];
@@ -1164,7 +1291,7 @@ class CommentaryView extends ItemView {
     }
     if (!rawOcrText) rawOcrText = cleanSnippet(snip) || '';
 
-    const correctedCandidate = (bookData && bookData.corrected && bookData.corrected[cardKey]) || '';
+    const correctedCandidate = getEntryCorrected(e, bookData);
     const isCorrupted = correctedCandidate && (correctedCandidate.trim().length < 20 && rawOcrText.length > 200);
     let isCorrected = !!correctedCandidate && !isCorrupted;
 
@@ -1189,7 +1316,7 @@ class CommentaryView extends ItemView {
         const prev = this._navHistory.pop();
         if (prev) {
           if (prev.ref && (prev.ref.b !== this.current?.b || prev.ref.ch !== this.current?.ch)) {
-            if (prev.entry) this.lastSelectedKey = `${prev.entry[4]}_${prev.entry[5]}_${prev.entry[6]}`;
+            if (prev.entry) this.lastSelectedKey = getEntryDomKey(prev.entry);
             this.search(refLabel(prev.ref, this.plugin));
           } else if (prev.entry) {
             selectItem(prev.entry);
@@ -1246,45 +1373,8 @@ class CommentaryView extends ItemView {
       title: '오타를 직접 수정하거나 묵상 메모 작성'
     });
 
-    // 책의 주석 항목 타이틀 헬퍼 (서론, 특별자료, 개요, 장 개관, 본문&자료노트, 장절 정밀 반영)
-    const getEntryTitle = (item) => {
-      if (!item) return '';
-      const [ib, ich, iv1, iv2, ifi, ip1, ip2, iki] = item;
-      const ibName = getBookDisplayName(ib, this.plugin);
-      const ikind = idx.kinds[iki] || (iv1 === 0 ? '장 개관' : '');
-      const iunit = ib === 19 ? '편' : '장';
-      let iref = '';
-      if (ich === 0) {
-        if (ikind === '참고문헌') {
-          iref = `${ibName} 참고문헌`;
-        } else if (ikind === '개요') {
-          iref = `${ibName} 개요`;
-        } else if (ikind === '특별자료') {
-          iref = `${ibName} 서론 특별자료`;
-        } else {
-          iref = `${ibName} 서론`;
-        }
-      } else if (ikind === '본문&자료노트') {
-        iref = `${ibName} ${ich}${iunit} 본문&자료노트`;
-      } else if (iv1 === 0) {
-        if (ikind === '설교') {
-          iref = `${ibName} ${ich}${iunit} 주제, 원어&교리설교`;
-        } else if (ikind === '핵심성구관주') {
-          iref = `${ibName} ${ich}${iunit} 핵심성구관주`;
-        } else if (ikind === '예화') {
-          iref = `${ibName} ${ich}${iunit} 예화`;
-        } else if (ikind === '금언') {
-          iref = `${ibName} ${ich}${iunit} 금언`;
-        } else {
-          const kStr = (ikind === '장 개관' || ikind === '개관') ? '개관' : (ikind || '개관');
-          iref = `${ibName} ${ich}${iunit} ${kStr}`;
-        }
-      } else {
-        iref = `${ibName} ${ich}:${iv1 === iv2 ? iv1 : `${iv1}-${iv2}`}`;
-      }
-      const tag = (ikind && !iref.includes(ikind) && ikind !== '장 개관' && ikind !== '개관') ? ` (${ikind})` : '';
-      return `${iref}${tag}`;
-    };
+    // 책의 주석 항목 타이틀 헬퍼
+    const getEntryTitle = (item) => formatEntryLabel(item, idx, this.plugin, true);
 
     // 4. 스크롤 본문 컨테이너
     const scrollContainer = readerPanel.createDiv({ cls: 'scf-reader-scroll' });
@@ -1306,17 +1396,18 @@ class CommentaryView extends ItemView {
     // 상태 배너: 상단 헤더 타이틀과 중복되던 불필요한 배너(AI 교정본 열람중, 정본 주석, 스펄전 설교전집 등) 말끔히 제거
 
 
-    // 본문 텍스트 엘리먼트
-    const contentEl = scrollContainer.createDiv({ cls: 'scf-fulltext' });
-    const renderContent = (txt) => {
-      contentEl.empty();
-      try {
-        MarkdownRenderer.render(this.plugin.app, txt || '', contentEl, '', this.plugin);
-      } catch (e) {
-        contentEl.createEl('pre', { text: txt || '' });
+    const polishRenderedCommentary = (targetContainer, navEntry) => {
+      if (!targetContainer) return;
+      if (targetContainer.querySelector('.scf-chapter-hero-title, .scf-verse-head, .scf-passage-box, .scf-badge-head, .scf-crossref-row, .scf-qt-item, .scf-maxim-row, h2')) {
+        targetContainer.addClass('scf-grand-article');
       }
-      // 상호참조 링크(0000 자료노트 참조 등) 클릭 시 바로 해당 주석 이동 & 돌아가기 스택 저장
-      contentEl.querySelectorAll('.scf-ref-link').forEach((link) => {
+      targetContainer.querySelectorAll('h3').forEach((h3) => {
+        const t = (h3.textContent || '').trim();
+        if (/■/.test(t) || /\s[—\-–]\s/.test(t)) {
+          h3.classList.add('scf-topic-hero');
+        }
+      });
+      targetContainer.querySelectorAll('.scf-ref-link').forEach((link) => {
         link.onclick = (evt) => {
           evt.stopPropagation();
           evt.preventDefault();
@@ -1324,13 +1415,47 @@ class CommentaryView extends ItemView {
           if (targetRef) {
             if (!this._navHistory) this._navHistory = [];
             this._navHistory.push({
-              entry: e,
+              entry: navEntry || e,
               ref: this.current
             });
             this.search(targetRef);
           }
         };
       });
+    };
+
+    // 본문 텍스트 엘리먼트
+    const contentEl = scrollContainer.createDiv({ cls: 'scf-fulltext' });
+    const renderContent = (txt) => {
+      contentEl.empty();
+      contentEl.removeClass('scf-grand-article');
+      try {
+        MarkdownRenderer.render(this.plugin.app, txt || '', contentEl, '', this.plugin);
+      } catch (err) {
+        contentEl.createEl('pre', { text: txt || '' });
+      }
+      polishRenderedCommentary(contentEl, e);
+      if (r && r.v1 > 0 && ch === r.ch && v1 === 0) {
+        const targets = contentEl.querySelectorAll('.scf-verse-head, .scf-qt-item, h4');
+        let matched = null;
+        for (const node of targets) {
+          const m = (node.textContent || '').trim().match(/^[•●]?\s*(\d{1,3})\s*[:：]\s*(\d{1,3})(?:\s*[-~]\s*(\d{1,3}))?/);
+          if (!m) continue;
+          const mc = parseInt(m[1], 10);
+          const mv1 = parseInt(m[2], 10);
+          const mv2 = m[3] ? parseInt(m[3], 10) : mv1;
+          if (mc === r.ch && r.v1 >= mv1 && r.v1 <= mv2) {
+            matched = node;
+            break;
+          }
+        }
+        if (matched) {
+          matched.classList.add('scf-verse-target-flash');
+          setTimeout(() => {
+            try { matched.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (_) {}
+          }, 50);
+        }
+      }
     };
     renderContent(currentText);
 
@@ -1383,8 +1508,16 @@ class CommentaryView extends ItemView {
         if (!bookData.corrected) bookData.corrected = {};
         bookData.corrected[cardKey] = val;
         const bStr = String(b).padStart(2, '0');
-        const path = `${this.plugin.manifest.dir}/data/b${bStr}.json`;
-        await this.plugin.app.vault.adapter.write(path, JSON.stringify(bookData));
+        const legacyPath = `${this.plugin.manifest.dir}/data/b${bStr}.json`;
+        if (!bookData._isChapterOnly && await this.plugin.app.vault.adapter.exists(legacyPath)) {
+          await this.plugin.app.vault.adapter.write(legacyPath, JSON.stringify(bookData));
+        } else {
+          await this.plugin.ensureVaultDir(`${this.plugin.manifest.dir}/data/chapters`);
+          const chPath = `${this.plugin.manifest.dir}/data/chapters/b${bStr}-${ch}.json`;
+          const saveObj = { ...bookData };
+          delete saveObj._isChapterOnly;
+          await this.plugin.app.vault.adapter.write(chPath, JSON.stringify(saveObj));
+        }
         currentText = val;
         isCorrected = true;
         renderContent(currentText);
@@ -1416,7 +1549,7 @@ class CommentaryView extends ItemView {
 
 
     let isLoadingNext = false;
-    const loadNextSection = () => {
+    const loadNextSection = async () => {
       if (isLoadingNext) return;
       if (nextEntryIndex < 0 || !allSourceEntries || nextEntryIndex >= allSourceEntries.length) {
         nextPageBtn.style.display = 'none';
@@ -1426,24 +1559,33 @@ class CommentaryView extends ItemView {
       isLoadingNext = true;
       const targetEntry = allSourceEntries[nextEntryIndex];
       const [tb, tch, tv1, tv2, tfi, tp1, tp2, tki, tsnip] = targetEntry;
-      const targetCardKey = `${tfi}_${tp1}_${tp2}`;
+      const targetCardKey = getEntryDomKey(targetEntry);
       const targetLabel = getEntryTitle(targetEntry);
 
       nextPageBtn.setText('⏳ 다음 주석 로딩 중...');
 
+      let nextBookData = bookData;
+      if (!nextBookData || (nextBookData._isChapterOnly && nextBookData.ch !== tch)) {
+        try {
+          nextBookData = await this.plugin.loadChapterData(tb, tch);
+        } catch (err) {
+          console.warn('loadChapterData next failed', err);
+        }
+      }
+
       // 다음 항목 본문 추출
       let targetRaw = '';
-      if (bookData && bookData.pages) {
+      if (nextBookData && nextBookData.pages) {
         const chunks = [];
         for (let p = tp1; p <= tp2; p++) {
           const k = `${tfi}_${p}`;
-          if (bookData.pages[k]) chunks.push(bookData.pages[k]);
+          if (nextBookData.pages[k]) chunks.push(nextBookData.pages[k]);
         }
         targetRaw = unwrapCommentary(chunks.join('\n'));
       }
       if (!targetRaw) targetRaw = cleanSnippet(tsnip) || '';
 
-      const tCorr = (bookData && bookData.corrected && bookData.corrected[targetCardKey]) || '';
+      const tCorr = getEntryCorrected(targetEntry, nextBookData);
       const tCorrupted = tCorr && (tCorr.trim().length < 20 && targetRaw.length > 200);
       const textToShow = (tCorr && !tCorrupted) ? unwrapCommentary(tCorr) : targetRaw;
 
@@ -1453,12 +1595,13 @@ class CommentaryView extends ItemView {
       divider.setText(`📖 다음 주석 이어보기: ${targetLabel}`);
 
       const textEl = pageWrap.createDiv({ cls: 'scf-fulltext' });
-      const formattedMarkdown = formatCommentaryText(textToShow);
+      const formattedMarkdown = textToShow;
       try {
         MarkdownRenderer.render(this.plugin.app, formattedMarkdown, textEl, '', this.plugin);
       } catch (err) {
         textEl.createEl('pre', { text: textToShow });
       }
+      polishRenderedCommentary(textEl, targetEntry);
 
       // 좌측 목록(listPanel) 활성 항목 동기화
       if (listPanel) {
@@ -2134,6 +2277,37 @@ class CommentarySettingTab extends PluginSettingTab {
       .setDesc('절 해설 외에, 그 장에 딸린 설교·연구자료·금언·장 개관 쪽도 접어서 보여 줍니다.')
       .addToggle((t) => t.setValue(!!s.showChapterLevel).onChange(async (v) => { s.showChapterLevel = v; await this.plugin.saveSettings(); }));
 
+    containerEl.createEl('h3', { text: 'BRAT · 아이패드 경량 데이터 동기화' });
+
+    new Setting(containerEl)
+      .setName('데이터 저장소 (GitHub)')
+      .setDesc('장 단위 주석 JSON 및 색인을 내려받을 GitHub 저장소 (예: owner/repo)')
+      .addText((t) => t
+        .setPlaceholder('hyod9866/sermon-commentary-data')
+        .setValue(s.dataRepo || '')
+        .onChange(async (v) => {
+          s.dataRepo = v.trim() || DEFAULT_SETTINGS.dataRepo;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(containerEl)
+      .setName('최신 색인·복원본 동기화')
+      .setDesc('GitHub에서 최신 색인과 복원 상태 목록을 받아오고, 갱신된 장 로컬 캐시를 정리합니다.')
+      .addButton((b) => b
+        .setButtonText('🔄 최신 색인·복원본 동기화')
+        .onClick(async () => {
+          await this.plugin.syncRemoteData(true);
+        }));
+
+    new Setting(containerEl)
+      .setName('다운로드된 장 캐시 비우기')
+      .setDesc('기기에 저장된 장 단위 캐시 파일(data/chapters)을 삭제해 용량을 확보합니다.')
+      .addButton((b) => b
+        .setButtonText('🧹 다운로드된 장 캐시 비우기')
+        .onClick(async () => {
+          await this.plugin.clearChapterCache();
+        }));
+
     if (idx) {
       containerEl.createEl('h3', { text: '주석 폴더 위치' });
       containerEl.createEl('p', { text: '주석 폴더를 다른 곳으로 옮겼다면 새 경로를 적어 주세요. 비워 두면 색인을 만들 때의 경로를 씁니다.' })
@@ -2160,7 +2334,12 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     this.index = null;
     this.lookup = new Map();
     this._bookCache = new Map();
+    this._chapterCache = new Map();
+    this._manifestData = null;
+    if (!this.settings.chapterHashes) this.settings.chapterHashes = {};
+    await this.loadLocalManifest();
     await this.loadIndex();
+    this.syncRemoteManifestSilent();
 
     this.registerView(VIEW_TYPE, (leaf) => new CommentaryView(leaf, this));
     this.addRibbonIcon('library', '주석 찾기', () => this.activateView());
@@ -2580,6 +2759,235 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     }
   }
 
+  getDataRawBaseUrl() {
+    const repo = (this.settings.dataRepo || DEFAULT_SETTINGS.dataRepo || '')
+      .trim()
+      .replace(/^https?:\/\/github\.com\//, '')
+      .replace(/\/+$/, '');
+    const branch = (this.settings.dataBranch || DEFAULT_SETTINGS.dataBranch || 'main').trim() || 'main';
+    return repo ? `https://raw.githubusercontent.com/${repo}/${branch}` : '';
+  }
+
+  async ensureVaultDir(relDir) {
+    const parts = String(relDir || '').split('/').filter(Boolean);
+    let cur = '';
+    for (const part of parts) {
+      cur = cur ? `${cur}/${part}` : part;
+      try {
+        if (!(await this.app.vault.adapter.exists(cur))) {
+          await this.app.vault.adapter.mkdir(cur);
+        }
+      } catch (e) {
+        // 이미 생성된 경우 무시
+      }
+    }
+  }
+
+  async fetchRawJson(relPath, timeoutMs = 20000) {
+    const base = this.getDataRawBaseUrl();
+    if (!base) throw new Error('데이터 저장소(GitHub)가 설정되지 않았습니다.');
+    const url = `${base}/${String(relPath || '').replace(/^\/+/, '')}`;
+    const reqPromise = requestUrl({ url, method: 'GET' });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`요청 시간 초과 (${timeoutMs}ms): ${relPath}`)), timeoutMs)
+    );
+    const res = await Promise.race([reqPromise, timeoutPromise]);
+    if (res && typeof res.status === 'number' && (res.status < 200 || res.status >= 300)) {
+      throw new Error(`HTTP ${res.status}: ${relPath}`);
+    }
+    const rawText = res && typeof res.text === 'string' && res.text.length > 0
+      ? res.text
+      : (res && res.json !== undefined ? JSON.stringify(res.json) : '');
+    const data = res && res.json !== undefined && typeof res.text !== 'string'
+      ? res.json
+      : JSON.parse(rawText);
+    return { data, rawText };
+  }
+
+  async loadLocalManifest() {
+    try {
+      const path = `${this.manifest.dir}/data/chapters_manifest.json`;
+      if (await this.app.vault.adapter.exists(path)) {
+        const raw = await this.app.vault.adapter.read(path);
+        this._manifestData = JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('[주석 찾기] 로컬 chapters_manifest.json 읽기 실패', e);
+    }
+  }
+
+  async syncRemoteManifestSilent() {
+    try {
+      const { data: remote, rawText } = await this.fetchRawJson('chapters_manifest.json', 10000);
+      if (!remote || !remote.chapters) return;
+      const prevHash = this._manifestData ? this._manifestData.indexHash : null;
+      await this.ensureVaultDir(`${this.manifest.dir}/data`);
+      await this.app.vault.adapter.write(`${this.manifest.dir}/data/chapters_manifest.json`, rawText || JSON.stringify(remote));
+      this._manifestData = remote;
+      const indexPath = `${this.manifest.dir}/${INDEX_FILE}`;
+      const indexMissing = !(await this.app.vault.adapter.exists(indexPath));
+      if (indexMissing || (remote.indexHash && remote.indexHash !== prevHash)) {
+        await this.fetchAndSaveIndex();
+      }
+    } catch (e) {
+      // 오프라인 또는 저장소 미연결 시 조용히 무시
+    }
+  }
+
+  _setChapterCache(cacheKey, data) {
+    if (this._chapterCache.has(cacheKey)) {
+      this._chapterCache.delete(cacheKey);
+    } else if (this._chapterCache.size >= 24) {
+      const firstKey = this._chapterCache.keys().next().value;
+      this._chapterCache.delete(firstKey);
+    }
+    this._chapterCache.set(cacheKey, data);
+  }
+
+  async loadChapterData(b, ch) {
+    if (!b || b < 1 || b > 66) return null;
+    const chNum = (ch === undefined || ch === null || Number.isNaN(Number(ch))) ? 0 : Number(ch);
+    const bStr = String(b).padStart(2, '0');
+    const cacheKey = `${b}-${chNum}`;
+    const manifestEntry = this._manifestData && this._manifestData.chapters ? this._manifestData.chapters[cacheKey] : null;
+    const expectedHash = manifestEntry && manifestEntry.h ? manifestEntry.h : null;
+    const savedHash = this.settings.chapterHashes ? this.settings.chapterHashes[cacheKey] : null;
+    const isStale = !!(expectedHash && savedHash && expectedHash !== savedHash);
+
+    if (!isStale && this._chapterCache.has(cacheKey)) {
+      const cached = this._chapterCache.get(cacheKey);
+      this._setChapterCache(cacheKey, cached);
+      return cached;
+    }
+
+    const localChapterPath = `${this.manifest.dir}/data/chapters/b${bStr}-${chNum}.json`;
+    const localLegacyPath = `${this.manifest.dir}/data/b${bStr}.json`;
+
+    // 1. 로컬 장 캐시 파일 확인 (최신 해시와 일치하거나 매니페스트 없을 때)
+    if (!isStale) {
+      try {
+        if (await this.app.vault.adapter.exists(localChapterPath)) {
+          const raw = await this.app.vault.adapter.read(localChapterPath);
+          const data = JSON.parse(raw);
+          if (data) data._isChapterOnly = true;
+          this._setChapterCache(cacheKey, data);
+          return data;
+        }
+      } catch (e) {
+        console.warn('[주석 찾기] 로컬 장 파일 읽기 실패', localChapterPath, e);
+      }
+    }
+
+    // 2. PC 호환용 전체 권 JSON (data/b{NN}.json) 확인
+    try {
+      if (await this.app.vault.adapter.exists(localLegacyPath)) {
+        const legacyData = await this.loadBookData(b);
+        if (legacyData) return legacyData;
+      }
+    } catch (e) {
+      // 무시 후 원격 시도
+    }
+
+    // 3. GitHub에서 해당 장 JSON만 온디맨드 다운로드
+    const remoteRel = (manifestEntry && manifestEntry.f) ? manifestEntry.f : `chapters/b${bStr}-${chNum}.json`;
+    try {
+      const { data, rawText } = await this.fetchRawJson(remoteRel, 25000);
+      if (data) {
+        data._isChapterOnly = true;
+        await this.ensureVaultDir(`${this.manifest.dir}/data/chapters`);
+        await this.app.vault.adapter.write(localChapterPath, rawText || JSON.stringify(data));
+        if (expectedHash) {
+          if (!this.settings.chapterHashes) this.settings.chapterHashes = {};
+          this.settings.chapterHashes[cacheKey] = expectedHash;
+          await this.saveSettings();
+        }
+        this._setChapterCache(cacheKey, data);
+        return data;
+      }
+    } catch (e) {
+      console.warn('[주석 찾기] 원격 장 다운로드 실패:', remoteRel, e);
+    }
+
+    // 4. 오프라인 fallback: 만료되었더라도 로컬 장 파일이 있으면 반환
+    try {
+      if (await this.app.vault.adapter.exists(localChapterPath)) {
+        const raw = await this.app.vault.adapter.read(localChapterPath);
+        const data = JSON.parse(raw);
+        if (data) data._isChapterOnly = true;
+        this._setChapterCache(cacheKey, data);
+        return data;
+      }
+    } catch (e) {
+      // 무시
+    }
+    return null;
+  }
+
+  async syncRemoteData(showNotice = true) {
+    try {
+      if (showNotice) new Notice('GitHub에서 최신 색인 및 복원 목록을 확인하는 중...');
+      const { data: remote, rawText: manifestRaw } = await this.fetchRawJson('chapters_manifest.json', 15000);
+      if (!remote || !remote.chapters) throw new Error('chapters_manifest.json 형식이 올바르지 않습니다.');
+
+      await this.ensureVaultDir(`${this.manifest.dir}/data`);
+      await this.app.vault.adapter.write(`${this.manifest.dir}/data/chapters_manifest.json`, manifestRaw || JSON.stringify(remote));
+      this._manifestData = remote;
+
+      await this.fetchAndSaveIndex();
+
+      // 해시가 바뀐 로컬 장 캐시 정리
+      let invalidated = 0;
+      if (this.settings.chapterHashes) {
+        for (const [k, oldH] of Object.entries(this.settings.chapterHashes)) {
+          const entry = remote.chapters[k];
+          if (entry && entry.h && entry.h !== oldH) {
+            this._chapterCache.delete(k);
+            const [kb, kch] = k.split('-');
+            const p = `${this.manifest.dir}/data/chapters/b${String(kb).padStart(2, '0')}-${kch}.json`;
+            try {
+              if (await this.app.vault.adapter.exists(p)) await this.app.vault.adapter.remove(p);
+            } catch (e) { /* 무시 */ }
+            delete this.settings.chapterHashes[k];
+            invalidated++;
+          }
+        }
+        if (invalidated > 0) await this.saveSettings();
+      }
+
+      if (showNotice) {
+        new Notice(`동기화 완료: ${remote.count || Object.keys(remote.chapters).length}개 장 최신화 (갱신된 캐시 ${invalidated}건 정리)`);
+      }
+      return true;
+    } catch (e) {
+      console.error('[주석 찾기] 원격 데이터 동기화 실패', e);
+      if (showNotice) new Notice(`동기화 실패: ${e.message || e}`);
+      return false;
+    }
+  }
+
+  async clearChapterCache() {
+    this._chapterCache.clear();
+    let removed = 0;
+    const chaptersDir = `${this.manifest.dir}/data/chapters`;
+    try {
+      if (await this.app.vault.adapter.exists(chaptersDir)) {
+        const listed = await this.app.vault.adapter.list(chaptersDir);
+        const files = (listed && listed.files) ? listed.files : [];
+        for (const f of files) {
+          if (f.endsWith('.json')) {
+            await this.app.vault.adapter.remove(f);
+            removed++;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[주석 찾기] 캐시 파일 삭제 실패', e);
+    }
+    this.settings.chapterHashes = {};
+    await this.saveSettings();
+    new Notice(`장 캐시 비우기 완료: ${removed}개 파일 삭제`);
+  }
+
   async getKoreanBibleVerses(b, ch, v1, v2) {
     try {
       const bf = this.app.plugins?.plugins?.['obsidian-bible-finder'] || this.app.plugins?.plugins?.['obsidian-bible-bible-finder'];
@@ -2743,40 +3151,86 @@ ${ocrText}`;
     return null;
   }
 
-  async saveCorrectedText(b, key, text) {
-    const bookData = await this.loadBookData(b);
-    if (!bookData) return;
-    if (!bookData.corrected) bookData.corrected = {};
-    bookData.corrected[key] = text;
+  async saveCorrectedText(b, key, text, ch = null) {
+    const bStr = String(b).padStart(2, '0');
+    const legacyPath = `${this.manifest.dir}/data/b${bStr}.json`;
+    const targetData = (ch !== null && ch !== undefined)
+      ? await this.loadChapterData(b, ch)
+      : await this.loadBookData(b);
+    if (!targetData) return;
+    if (!targetData.corrected) targetData.corrected = {};
+    targetData.corrected[key] = text;
     try {
-      const bStr = String(b).padStart(2, '0');
-      const path = `${this.manifest.dir}/data/b${bStr}.json`;
-      await this.app.vault.adapter.write(path, JSON.stringify(bookData));
+      if (!targetData._isChapterOnly && await this.app.vault.adapter.exists(legacyPath)) {
+        await this.app.vault.adapter.write(legacyPath, JSON.stringify(targetData));
+      } else if (ch !== null && ch !== undefined) {
+        await this.ensureVaultDir(`${this.manifest.dir}/data/chapters`);
+        await this.app.vault.adapter.write(`${this.manifest.dir}/data/chapters/b${bStr}-${ch}.json`, JSON.stringify(targetData));
+      }
     } catch (e) {
       console.error('교정 데이터 저장 실패', e);
     }
   }
 
-  async loadIndex() {
-    try {
-      const path = `${this.manifest.dir}/${INDEX_FILE}`;
-      const raw = await this.app.vault.adapter.read(path);
-      const data = JSON.parse(raw);
-      this.index = data;
-      this.lookup = new Map();
-      this.bookLookup = new Map();
-      for (const e of data.entries) {
-        const k = `${e[0]}:${e[1]}`;
-        let arr = this.lookup.get(k);
-        if (!arr) { arr = []; this.lookup.set(k, arr); }
-        arr.push(e);
+  _buildIndexMaps(data) {
+    this.index = data;
+    this.lookup = new Map();
+    this.bookLookup = new Map();
+    if (!data || !Array.isArray(data.entries)) return;
+    for (const e of data.entries) {
+      const k = `${e[0]}:${e[1]}`;
+      let arr = this.lookup.get(k);
+      if (!arr) { arr = []; this.lookup.set(k, arr); }
+      arr.push(e);
 
-        let barr = this.bookLookup.get(e[0]);
-        if (!barr) { barr = []; this.bookLookup.set(e[0], barr); }
-        barr.push(e);
+      let barr = this.bookLookup.get(e[0]);
+      if (!barr) { barr = []; this.bookLookup.set(e[0], barr); }
+      barr.push(e);
+    }
+  }
+
+  async fetchAndSaveIndex() {
+    const { data, rawText } = await this.fetchRawJson(INDEX_FILE, 30000);
+    if (!data || !Array.isArray(data.entries)) {
+      throw new Error('commentary-index.json 형식이 올바르지 않습니다.');
+    }
+    await this.ensureVaultDir(this.manifest.dir);
+    await this.app.vault.adapter.write(`${this.manifest.dir}/${INDEX_FILE}`, rawText || JSON.stringify(data));
+    this._buildIndexMaps(data);
+    return data;
+  }
+
+  async loadIndex() {
+    const path = `${this.manifest.dir}/${INDEX_FILE}`;
+    try {
+      if (await this.app.vault.adapter.exists(path)) {
+        const raw = await this.app.vault.adapter.read(path);
+        const data = JSON.parse(raw);
+        this._buildIndexMaps(data);
+        return;
       }
     } catch (e) {
-      console.error('[주석 찾기] 색인 불러오기 실패', e);
+      console.error('[주석 찾기] 로컬 색인 불러오기 실패', e);
+      this.index = null;
+    }
+
+    // BRAT 신규 설치 등 로컬 색인이 없으면 GitHub 데이터 저장소에서 자동 내려받기
+    try {
+      new Notice('주석 색인(약 3MB)을 처음 내려받는 중입니다...');
+      try {
+        const { data: remoteManifest, rawText: manifestRaw } = await this.fetchRawJson('chapters_manifest.json', 15000);
+        if (remoteManifest && remoteManifest.chapters) {
+          await this.ensureVaultDir(`${this.manifest.dir}/data`);
+          await this.app.vault.adapter.write(`${this.manifest.dir}/data/chapters_manifest.json`, manifestRaw || JSON.stringify(remoteManifest));
+          this._manifestData = remoteManifest;
+        }
+      } catch (manifestErr) {
+        console.warn('[주석 찾기] 초기 매니페스트 다운로드 생략:', manifestErr);
+      }
+      await this.fetchAndSaveIndex();
+      new Notice('주석 색인 준비 완료! 성경 장을 선택하면 해당 장만 자동으로 내려받습니다.');
+    } catch (e) {
+      console.error('[주석 찾기] 원격 색인 불러오기 실패', e);
       this.index = null;
     }
   }
@@ -2973,7 +3427,7 @@ ${ocrText}`;
   }
   async loadBibleDictionary() {
     if (this._bibleDict) return this._bibleDict;
-    const relPath = '.obsidian/plugins/sermon-commentary-finder/data/bible-dict.json';
+    const relPath = `${this.manifest.dir}/data/bible-dict.json`;
     try {
       if (await this.app.vault.adapter.exists(relPath)) {
         const raw = await this.app.vault.adapter.read(relPath);
@@ -2988,13 +3442,29 @@ ${ocrText}`;
       const fs = require('fs');
       const path = require('path');
       const basePath = this.app.vault.adapter.basePath || (this.app.vault.adapter.getBasePath ? this.app.vault.adapter.getBasePath() : '');
-      const dictPath = path.join(basePath, '.obsidian', 'plugins', 'sermon-commentary-finder', 'data', 'bible-dict.json');
-      if (fs.existsSync(dictPath)) {
-        const raw = fs.readFileSync(dictPath, 'utf8');
-        this._bibleDict = JSON.parse(raw);
-        return this._bibleDict;
+      if (basePath) {
+        const dictPath = path.join(basePath, '.obsidian', 'plugins', 'sermon-commentary-finder', 'data', 'bible-dict.json');
+        if (fs.existsSync(dictPath)) {
+          const raw = fs.readFileSync(dictPath, 'utf8');
+          this._bibleDict = JSON.parse(raw);
+          return this._bibleDict;
+        }
       }
     } catch (e) {}
+    // BRAT / 모바일 환경: 원격 데이터 저장소에서 성경사전 온디맨드 다운로드
+    try {
+      new Notice('성경대사전(약 10MB)을 내려받는 중입니다...');
+      const { data, rawText } = await this.fetchRawJson('dictionaries/bible-dict.json', 45000);
+      if (data) {
+        await this.ensureVaultDir(`${this.manifest.dir}/data`);
+        await this.app.vault.adapter.write(relPath, rawText || JSON.stringify(data));
+        this._bibleDict = data;
+        new Notice('성경대사전 준비 완료!');
+        return this._bibleDict;
+      }
+    } catch (e) {
+      console.warn('[loadBibleDictionary 원격 다운로드 실패]', e);
+    }
     return { total: 0, entries: [] };
   }
 

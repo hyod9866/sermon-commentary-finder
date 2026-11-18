@@ -910,6 +910,36 @@
   flex-direction: column;
 }
 
+.scf-list-verse-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+button.scf-list-expand-btn,
+.scf-list-expand-btn {
+  width: 100%;
+  padding: 5px 8px;
+  margin: 2px 0;
+  border-radius: 5px;
+  border: 1px dashed var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 11.5px;
+  font-weight: 600;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.scf-list-expand-btn:hover {
+  background: var(--background-modifier-hover);
+  color: var(--interactive-accent);
+  border-color: var(--interactive-accent);
+}
+.scf-list-collapse-btn {
+  color: var(--text-accent);
+  border-style: solid;
+}
+
 /* 목록 항목 (클릭하여 우측 본문 로드) - button 태그로 브라우저/옵시디언 100% 클릭 보장 */
 button.scf-list-item,
 .scf-list-item {
@@ -2144,4 +2174,88 @@ button.scf-list-item,
   background: rgba(250, 204, 21, 0.24) !important;
   border-radius: 4px !important;
   padding: 1px 4px !important;
+}
+
+/* ===== 매킨토시 모세오경 주석 단행본 스타일 (명조 본문 + 고딕 성경인용·강조) ===== */
+.scf-fulltext.scf-mack-article,
+.scf-fulltext.scf-mack-article p,
+.scf-fulltext.scf-mack-article li {
+  font-family: var(--scf-serif) !important;
+  font-size: var(--scf-font-size, 15px) !important;
+  line-height: 1.92 !important;
+  letter-spacing: -0.01em !important;
+  color: var(--text-normal) !important;
+}
+.scf-fulltext.scf-mack-article p {
+  text-indent: 1em !important;
+  margin: 0 0 0.85em !important;
+}
+.scf-fulltext.scf-mack-article h1,
+.scf-fulltext.scf-mack-article .scf-mack-ch-head {
+  font-family: var(--scf-serif) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.48) !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  letter-spacing: 0.14em !important;
+  color: var(--text-normal) !important;
+  padding: 4px 0 12px !important;
+  margin: 4px 0 26px !important;
+  border-bottom: 2.5px solid var(--text-normal) !important;
+}
+.scf-fulltext.scf-mack-article h2,
+.scf-fulltext.scf-mack-article h3,
+.scf-fulltext.scf-mack-article p.scf-mack-sub-head {
+  font-family: var(--scf-serif) !important;
+  font-size: calc(var(--scf-font-size, 15px) * 1.24) !important;
+  font-weight: 800 !important;
+  text-align: center !important;
+  text-indent: 0 !important;
+  letter-spacing: 0.08em !important;
+  color: var(--scf-h3-color, var(--text-normal)) !important;
+  padding-bottom: 7px !important;
+  margin: 1.8em 0 1.1em !important;
+  border-bottom: 1.5px solid var(--background-modifier-border-hover, var(--background-modifier-border)) !important;
+}
+.scf-fulltext.scf-mack-article p.scf-mack-bible-quote {
+  text-indent: 0 !important;
+  padding-left: 1.35em !important;
+  margin: 1.15em 0 !important;
+  font-family: var(--scf-gothic) !important;
+  font-weight: 700 !important;
+  color: var(--scf-gothic-inline, var(--text-normal)) !important;
+  letter-spacing: -0.015em !important;
+  line-height: 1.8 !important;
+}
+.scf-fulltext.scf-mack-article .scf-mack-gothic,
+.scf-fulltext.scf-mack-article p strong,
+.scf-fulltext.scf-mack-article li strong {
+  font-family: var(--scf-gothic) !important;
+  font-weight: 700 !important;
+  color: var(--scf-gothic-inline, var(--text-normal)) !important;
+  letter-spacing: -0.015em !important;
+}
+.scf-fulltext .scf-dict-verse-link {
+  font-family: var(--scf-gothic) !important;
+  padding: 0 3px !important;
+}
+
+.scf-legacy-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+.scf-legacy-notice-path {
+  font-family: var(--font-monospace);
+  font-size: 11.5px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.12);
+  word-break: break-all;
+}
+.scf-legacy-notice-btns {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
 }

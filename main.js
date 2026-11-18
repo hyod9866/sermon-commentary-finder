@@ -74,7 +74,99 @@ const DEFAULT_SETTINGS = {
   dataBranch: 'main',
   externalDataDir: 'C:\\Users\\D-kanghyodgeun\\Documents\\KHG_build\\commentary_data', // 보관함 외부 대용량 데이터 경로 (Obsidian Sync 제외)
   chapterHashes: {},
+  installedPacks: {},         // 선택 설치한 주석 팩 상태 ({ [sid]: { hash, zipBytes, fileCount, installedAt, storage } })
+  installedPacksOnly: false,  // true면 설치한 주석 팩만 사용 (미설치 주석의 GitHub 자동 조회 끄기)
 };
+
+const PACK_DEFS = [
+  { id: 'bible-dict', name: '성경대사전', desc: '성경 인물·지명·신학 용어 백과사전' },
+  { id: 'mackintosh', name: '매킨토시 모세오경 강해', desc: '창세기~신명기 C.H.M. 강해 전집 (5권)' },
+  { id: 'hokma', name: '호크마 종합주석', desc: '창세기~요한계시록 66권 전체' },
+  { id: 'matthew', name: '매튜 헨리 주석', desc: '창세기~요한계시록 66권 전체' },
+  { id: 'spurgeon_psalms', name: '스펄전 시편 보화', desc: '시편 1~150편 (다윗의 보고)' },
+  { id: 'spurgeon', name: '스펄전 설교 전집', desc: '창세기~요한계시록 성경구절 색인 설교' },
+  { id: 'grand', name: '그랜드 종합주석 (대용량)', desc: '창세기~요한계시록 66권 (압축 약 152 MB · 매일 복원본 반영)' },
+];
+const PACKABLE_COMMENTARY_IDS = new Set(['hokma', 'matthew', 'mackintosh', 'grand', 'spurgeon_psalms', 'spurgeon']);
+
+function formatBytesMb(bytes) {
+  const n = Number(bytes || 0);
+  if (!n) return '-';
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function parseZipCentralDirectory(u8) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  let eocdOffset = -1;
+  const minOff = Math.max(0, u8.length - 65558);
+  for (let i = u8.length - 22; i >= minOff; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) {
+      eocdOffset = i;
+      break;
+    }
+  }
+  if (eocdOffset < 0) throw new Error('유효한 ZIP 파일이 아닙니다 (EOCD 없음).');
+  const totalEntries = dv.getUint16(eocdOffset + 10, true);
+  const cdOffset = dv.getUint32(eocdOffset + 16, true);
+  const dec = new TextDecoder('utf-8');
+  const entries = [];
+  let p = cdOffset;
+  for (let i = 0; i < totalEntries; i++) {
+    if (p + 46 > u8.length || dv.getUint32(p, true) !== 0x02014b50) {
+      throw new Error('ZIP 중앙 디렉터리 손상');
+    }
+    const method = dv.getUint16(p + 10, true);
+    const compSize = dv.getUint32(p + 20, true);
+    const uncompSize = dv.getUint32(p + 24, true);
+    const nameLen = dv.getUint16(p + 28, true);
+    const extraLen = dv.getUint16(p + 30, true);
+    const commentLen = dv.getUint16(p + 32, true);
+    const localHeaderOffset = dv.getUint32(p + 42, true);
+    const name = dec.decode(u8.subarray(p + 46, p + 46 + nameLen));
+    entries.push({ name, method, compSize, uncompSize, localHeaderOffset });
+    p += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+async function extractZipEntryBytes(u8, entry) {
+  const dv = new DataView(u8.buffer, u8.byteOffset, u8.byteLength);
+  const lh = entry.localHeaderOffset;
+  if (lh + 30 > u8.length || dv.getUint32(lh, true) !== 0x04034b50) {
+    throw new Error(`ZIP 로컬 헤더 손상: ${entry.name}`);
+  }
+  const lfNameLen = dv.getUint16(lh + 26, true);
+  const lfExtraLen = dv.getUint16(lh + 28, true);
+  const dataStart = lh + 30 + lfNameLen + lfExtraLen;
+  const compSlice = u8.subarray(dataStart, dataStart + entry.compSize);
+  if (entry.method === 0) {
+    return new Uint8Array(compSlice);
+  }
+  if (entry.method !== 8) {
+    throw new Error(`지원하지 않는 ZIP 압축 방식(${entry.method}): ${entry.name}`);
+  }
+  if (typeof require === 'function') {
+    try {
+      const zlib = require('zlib');
+      if (zlib && typeof zlib.inflateRawSync === 'function') {
+        const out = zlib.inflateRawSync(compSlice);
+        return new Uint8Array(out.buffer, out.byteOffset, out.byteLength);
+      }
+    } catch (e) {
+      // Node zlib 실패 시 Web DecompressionStream fallback
+    }
+  }
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('이 기기는 DEFLATE 압축 해제를 지원하지 않습니다 (iPadOS 16.4 이상 필요).');
+  }
+  const ds = new DecompressionStream('deflate-raw');
+  const readerPromise = new Response(ds.readable).arrayBuffer();
+  const writer = ds.writable.getWriter();
+  await writer.write(compSlice);
+  await writer.close();
+  return new Uint8Array(await readerPromise);
+}
 
 /**
  * "요 3:16", "요한복음 3장 16절", "골 3 5", "골 3 5-11", "롬 8", "골" 등을 폭넓게 해석한다.
@@ -1874,14 +1966,16 @@ class CommentaryView extends ItemView {
       saveBtn.setText('저장 중...');
       try {
         if (!bookData.corrected) bookData.corrected = {};
+        if (!bookData._userCorrected) bookData._userCorrected = {};
         bookData.corrected[storageKey] = val;
+        bookData._userCorrected[storageKey] = true;
         const bStr = String(b).padStart(2, '0');
         const legacyPath = `${this.plugin.manifest.dir}/data/b${bStr}.json`;
-        if (!bookData._isChapterOnly && await this.plugin.app.vault.adapter.exists(legacyPath)) {
+        if (!bookData._isChapterOnly && !bookData._fromPacks && await this.plugin.app.vault.adapter.exists(legacyPath)) {
           const saveObj = { ...bookData };
           delete saveObj._externalBookPath;
           await this.plugin.app.vault.adapter.write(legacyPath, JSON.stringify(saveObj));
-        } else if (!bookData._isChapterOnly && bookData._externalBookPath) {
+        } else if (!bookData._isChapterOnly && !bookData._fromPacks && bookData._externalBookPath) {
           const fs = require('fs');
           const saveObj = { ...bookData };
           delete saveObj._externalBookPath;
@@ -1889,10 +1983,21 @@ class CommentaryView extends ItemView {
         } else {
           await this.plugin.ensureVaultDir(`${this.plugin.manifest.dir}/data/chapters`);
           const chPath = `${this.plugin.manifest.dir}/data/chapters/b${bStr}-${ch}.json`;
-          const saveObj = { ...bookData };
-          delete saveObj._isChapterOnly;
-          delete saveObj._externalBookPath;
-          await this.plugin.app.vault.adapter.write(chPath, JSON.stringify(saveObj));
+          let existingCh = null;
+          try {
+            if (await this.plugin.app.vault.adapter.exists(chPath)) {
+              existingCh = JSON.parse(await this.plugin.app.vault.adapter.read(chPath));
+            }
+          } catch (_) {}
+          const baseObj = (existingCh && typeof existingCh === 'object') ? existingCh : { ...bookData };
+          if (!baseObj.corrected) baseObj.corrected = {};
+          if (!baseObj._userCorrected) baseObj._userCorrected = {};
+          baseObj.corrected[storageKey] = val;
+          baseObj._userCorrected[storageKey] = true;
+          delete baseObj._isChapterOnly;
+          delete baseObj._externalBookPath;
+          delete baseObj._fromPacks;
+          await this.plugin.app.vault.adapter.write(chPath, JSON.stringify(baseObj));
         }
         currentText = val;
         isCorrected = true;
@@ -2623,6 +2728,126 @@ class CommentarySettingTab extends PluginSettingTab {
           await this.plugin.cleanLegacyVaultDataFiles();
         }));
 
+    containerEl.createEl('h3', { text: '📥 주석별 선택 다운로드 (PC · 아이패드 오프라인)' });
+    const isMobileEnv = !!(Platform && Platform.isMobile);
+    const packLocDesc = isMobileEnv
+      ? `저장 위치: ${this.plugin.manifest.dir}/data/packs/ (이 기기 전용 오프라인 보관 · ⚠ 아이패드에서 그랜드 주석(약 516MB 압축해제) 등 대용량 팩을 받을 경우 Obsidian Sync 설정 → '설치된 커뮤니티 플러그인' 동기화를 끄면 1GB 제한에 걸리지 않습니다.)`
+      : `저장 위치: ${this.plugin._getPackStorageRoot()}\\packs\\ (옵시디언 보관함 외부 폴더이므로 Sync 용량 0 MB)`;
+    const packIntro = containerEl.createDiv({ cls: 'scf-packs-intro' });
+    packIntro.createEl('div', { text: '원하는 주석 팩만 골라 GitHub Releases에서 통째로 내려받아 오프라인으로도 바로 열람할 수 있습니다.' });
+    packIntro.createEl('div', { cls: 'scf-packs-path', text: packLocDesc });
+
+    new Setting(containerEl)
+      .setName('설치한 주석 팩만 로컬 사용 (온라인 자동 조회 끄기)')
+      .setDesc('켜면 내가 내려받은 주석 팩의 내용만 표시하고, 설치하지 않은 주석은 GitHub에서 자동으로 내려받지 않습니다.')
+      .addToggle((t) => t
+        .setValue(Boolean(s.installedPacksOnly))
+        .onChange(async (v) => {
+          s.installedPacksOnly = v;
+          this.plugin._chapterCache.clear();
+          await this.plugin.saveSettings();
+        }));
+
+    const packToolbar = containerEl.createDiv({ cls: 'scf-packs-toolbar' });
+    const refreshBtn = packToolbar.createEl('button', { text: '🔄 팩 목록·업데이트 확인' });
+    const statusLabel = packToolbar.createSpan({ cls: 'scf-packs-status-msg', text: '' });
+    const packsListEl = containerEl.createDiv({ cls: 'scf-packs-list' });
+
+    const renderPackRows = () => {
+      packsListEl.empty();
+      const manifest = this.plugin._packsManifestData;
+      const installed = (this.plugin.settings && this.plugin.settings.installedPacks) || {};
+      for (const def of PACK_DEFS) {
+        const remoteInfo = manifest && manifest.packs ? manifest.packs[def.id] : null;
+        const localInfo = installed[def.id] || null;
+        const hasUpdate = Boolean(localInfo && remoteInfo && remoteInfo.hash && localInfo.hash !== remoteInfo.hash);
+
+        const row = packsListEl.createDiv({ cls: 'scf-pack-row' });
+        const infoCol = row.createDiv({ cls: 'scf-pack-info' });
+        const titleRow = infoCol.createDiv({ cls: 'scf-pack-title-row' });
+        titleRow.createSpan({ cls: 'scf-pack-name', text: def.name });
+
+        let badgeCls = 'scf-pack-badge scf-pack-badge-none';
+        let badgeTxt = '미설치';
+        if (hasUpdate) {
+          badgeCls = 'scf-pack-badge scf-pack-badge-update';
+          badgeTxt = '업데이트 있음';
+        } else if (localInfo) {
+          badgeCls = 'scf-pack-badge scf-pack-badge-ok';
+          badgeTxt = '✓ 설치됨';
+        }
+        titleRow.createSpan({ cls: badgeCls, text: badgeTxt });
+
+        const metaParts = [def.desc];
+        if (remoteInfo) {
+          metaParts.push(`다운로드 ${formatBytesMb(remoteInfo.zipBytes)} (해제 후 ${formatBytesMb(remoteInfo.rawBytes)} · ${remoteInfo.fileCount}파일)`);
+        } else if (localInfo) {
+          metaParts.push(`${localInfo.fileCount || 0}파일 · 해제 ${formatBytesMb(localInfo.rawBytes || localInfo.zipBytes)}`);
+        }
+        infoCol.createDiv({ cls: 'scf-pack-desc', text: metaParts.join(' · ') });
+
+        const btnCol = row.createDiv({ cls: 'scf-pack-actions' });
+        const dlBtn = btnCol.createEl('button', {
+          cls: localInfo ? 'scf-mini-btn' : 'mod-cta scf-mini-btn',
+          text: hasUpdate ? '🔄 업데이트' : (localInfo ? '↻ 재설치' : '⬇ 다운로드'),
+        });
+        dlBtn.onclick = async () => {
+          dlBtn.disabled = true;
+          const origText = dlBtn.textContent;
+          try {
+            statusLabel.setText(`${def.name} 내려받는 중...`);
+            const res = await this.plugin.installPack(def.id, (msg) => {
+              dlBtn.setText(msg);
+              statusLabel.setText(`${def.name}: ${msg}`);
+            });
+            statusLabel.setText(`✓ ${def.name} 설치 완료 (${res.writtenCount}개 파일)`);
+            new Notice(`✅ ${def.name} 설치 완료! (${res.writtenCount}개 파일)`);
+            renderPackRows();
+          } catch (err) {
+            statusLabel.setText(`❌ ${def.name} 실패: ${err.message}`);
+            new Notice(`❌ ${def.name} 다운로드 실패: ${err.message}`, 8000);
+            dlBtn.disabled = false;
+            dlBtn.setText(origText);
+          }
+        };
+
+        if (localInfo) {
+          const delBtn = btnCol.createEl('button', { cls: 'scf-mini-btn scf-pack-del-btn', text: '삭제' });
+          delBtn.onclick = async () => {
+            delBtn.disabled = true;
+            try {
+              await this.plugin.uninstallPack(def.id);
+              statusLabel.setText(`🗑️ ${def.name} 삭제됨`);
+              new Notice(`🗑️ ${def.name} 로컬 팩 삭제 완료`);
+              renderPackRows();
+            } catch (err) {
+              new Notice(`삭제 실패: ${err.message}`);
+              delBtn.disabled = false;
+            }
+          };
+        }
+      }
+    };
+
+    refreshBtn.onclick = async () => {
+      refreshBtn.disabled = true;
+      statusLabel.setText('GitHub에서 최신 팩 목록을 확인하는 중...');
+      try {
+        await this.plugin.fetchPacksManifest(true);
+        statusLabel.setText('✓ 최신 팩 목록 확인 완료');
+        renderPackRows();
+      } catch (err) {
+        statusLabel.setText(`❌ 목록 조회 실패: ${err.message}`);
+      } finally {
+        refreshBtn.disabled = false;
+      }
+    };
+
+    renderPackRows();
+    if (!this.plugin._packsManifestData) {
+      this.plugin.fetchPacksManifest(false).then(() => renderPackRows()).catch(() => {});
+    }
+
     if (idx) {
       containerEl.createEl('h3', { text: '주석 폴더 위치' });
       containerEl.createEl('p', { text: '주석 폴더를 다른 곳으로 옮겼다면 새 경로를 적어 주세요. 비워 두면 색인을 만들 때의 경로를 씁니다.' })
@@ -2649,10 +2874,14 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     this.index = null;
     this.lookup = new Map();
     this._bookCache = new Map();
+    this._packBookCache = new Map();
     this._chapterCache = new Map();
     this._manifestData = null;
+    this._packsManifestData = null;
     if (!this.settings.chapterHashes) this.settings.chapterHashes = {};
+    if (!this.settings.installedPacks) this.settings.installedPacks = {};
     await this.loadLocalManifest();
+    await this.loadLocalPacksManifest();
     await this.loadIndex();
     this.syncRemoteManifestSilent();
     this._legacyCheckTimer = setTimeout(() => {
@@ -3170,6 +3399,8 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     if (!this.settings.rootOverrides) this.settings.rootOverrides = {};
+    if (!this.settings.installedPacks) this.settings.installedPacks = {};
+    if (!this.settings.chapterHashes) this.settings.chapterHashes = {};
   }
   async saveSettings() { await this.saveData(this.settings); }
 
@@ -3370,6 +3601,287 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     }
   }
 
+  async loadLocalPacksManifest() {
+    try {
+      const p = `${this.manifest.dir}/data/packs_manifest.json`;
+      if (await this.app.vault.adapter.exists(p)) {
+        const raw = await this.app.vault.adapter.read(p);
+        this._packsManifestData = JSON.parse(raw);
+      }
+    } catch (e) {
+      console.warn('[주석 찾기] 로컬 packs_manifest.json 읽기 실패', e);
+    }
+  }
+
+  _getPackStorageRoot() {
+    if (Platform && Platform.isMobile) return null;
+    if (typeof require !== 'function') return null;
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      const os = require('os');
+      const configured = (this.settings && this.settings.externalDataDir ? this.settings.externalDataDir : '').trim();
+      const basePath = this.app?.vault?.adapter?.basePath || (this.app?.vault?.adapter?.getBasePath ? this.app.vault.adapter.getBasePath() : '');
+      if (configured) {
+        const isCustom = configured !== DEFAULT_SETTINGS.externalDataDir;
+        if (isCustom || fs.existsSync(configured) || fs.existsSync(path.dirname(configured))) {
+          return configured;
+        }
+      }
+      if (basePath) {
+        const siblingBuild = path.resolve(basePath, '..', 'KHG_build', 'commentary_data');
+        if (fs.existsSync(siblingBuild)) return siblingBuild;
+      }
+      return path.join(os.homedir(), '.sermon-commentary-data');
+    } catch (e) {}
+    return null;
+  }
+
+  getPackReleaseAssetUrl(fileName, manifest = null) {
+    const repo = (this.settings.dataRepo || DEFAULT_SETTINGS.dataRepo || '')
+      .trim()
+      .replace(/^https?:\/\/github\.com\//, '')
+      .replace(/\/+$/, '');
+    if (!repo) throw new Error('데이터 저장소(GitHub)가 설정되지 않았습니다.');
+    const tag = (manifest && manifest.releaseTag) || (this._packsManifestData && this._packsManifestData.releaseTag) || 'packs-latest';
+    return `https://github.com/${repo}/releases/download/${tag}/${String(fileName || '').replace(/^\/+/, '')}`;
+  }
+
+  async fetchPacksManifest(showError = false) {
+    let manifest = null;
+    let rawText = '';
+    try {
+      const res = await this.fetchRawJson('packs_manifest.json', 12000);
+      manifest = res.data;
+      rawText = res.rawText;
+    } catch (e) {
+      try {
+        const url = this.getPackReleaseAssetUrl('packs_manifest.json', { releaseTag: 'packs-latest' });
+        const reqPromise = requestUrl({ url, method: 'GET' });
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('packs_manifest 요청 시간 초과')), 12000));
+        const res = await Promise.race([reqPromise, timeoutPromise]);
+        if (res && res.status >= 200 && res.status < 300) {
+          rawText = typeof res.text === 'string' && res.text ? res.text : JSON.stringify(res.json);
+          manifest = typeof res.json === 'object' && res.json ? res.json : JSON.parse(rawText);
+        }
+      } catch (e2) {
+        if (showError) throw e2;
+      }
+    }
+    if (!manifest || !manifest.packs) {
+      if (showError) throw new Error('packs_manifest.json 형식이 올바르지 않습니다.');
+      return null;
+    }
+    this._packsManifestData = manifest;
+    try {
+      await this.ensureVaultDir(`${this.manifest.dir}/data`);
+      await this.app.vault.adapter.write(`${this.manifest.dir}/data/packs_manifest.json`, rawText || JSON.stringify(manifest));
+    } catch (_) {}
+    return manifest;
+  }
+
+  async installPack(sid, onProgress = null) {
+    const manifest = this._packsManifestData || await this.fetchPacksManifest(true);
+    const packInfo = manifest && manifest.packs ? manifest.packs[sid] : null;
+    if (!packInfo || !packInfo.file) {
+      throw new Error(`릴리즈 목록에서 팩(${sid})을 찾을 수 없습니다.`);
+    }
+    if (!this.index) {
+      try { await this.fetchAndSaveIndex(); } catch (_) {}
+    }
+
+    const url = this.getPackReleaseAssetUrl(packInfo.file, manifest);
+    onProgress?.(`다운로드 중 (${formatBytesMb(packInfo.zipBytes)})...`);
+    const timeoutMs = Math.max(45000, Math.round((packInfo.zipBytes || 0) / 1024 / 20));
+    const reqPromise = requestUrl({ url, method: 'GET' });
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`다운로드 시간 초과 (${packInfo.file})`)), timeoutMs)
+    );
+    const res = await Promise.race([reqPromise, timeoutPromise]);
+    if (res && typeof res.status === 'number' && (res.status < 200 || res.status >= 300)) {
+      throw new Error(`HTTP ${res.status}: ${packInfo.file}`);
+    }
+    const ab = res && res.arrayBuffer;
+    if (!ab || !ab.byteLength) throw new Error(`빈 응답 파일입니다 (${packInfo.file})`);
+
+    const u8 = new Uint8Array(ab);
+    const entries = parseZipCentralDirectory(u8).filter((e) => !e.name.endsWith('/'));
+    if (!entries.length) throw new Error(`압축 파일에 JSON 데이터가 없습니다 (${packInfo.file})`);
+
+    const isMobile = !!(Platform && Platform.isMobile) || typeof require !== 'function';
+    const rootDir = isMobile ? null : this._getPackStorageRoot();
+    let writtenCount = 0;
+
+    if (!isMobile && rootDir) {
+      const fs = require('fs');
+      const path = require('path');
+      const packDir = path.join(rootDir, 'packs', sid);
+      fs.mkdirSync(packDir, { recursive: true });
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const baseName = path.posix.basename(entry.name);
+        if (!baseName || baseName.includes('..')) continue;
+        if (i === 0 || (i + 1) % 5 === 0 || i + 1 === entries.length) {
+          onProgress?.(`해제 중 (${i + 1}/${entries.length})`);
+        }
+        const bytes = await extractZipEntryBytes(u8, entry);
+        fs.writeFileSync(path.join(packDir, baseName), bytes);
+        writtenCount++;
+      }
+    } else {
+      const packRelDir = `${this.manifest.dir}/data/packs/${sid}`;
+      await this.ensureVaultDir(packRelDir);
+      const dec = new TextDecoder('utf-8');
+      for (let i = 0; i < entries.length; i++) {
+        const entry = entries[i];
+        const baseName = entry.name.split('/').pop();
+        if (!baseName || baseName.includes('..')) continue;
+        onProgress?.(`해제 중 (${i + 1}/${entries.length}: ${baseName})`);
+        const bytes = await extractZipEntryBytes(u8, entry);
+        await this.app.vault.adapter.write(`${packRelDir}/${baseName}`, dec.decode(bytes));
+        writtenCount++;
+        if (i % 3 === 2) {
+          await new Promise((r) => setTimeout(r, 0));
+        }
+      }
+    }
+
+    this._packBookCache.clear();
+    this._chapterCache.clear();
+    this._bookCache.clear();
+    if (sid === 'bible-dict') this._bibleDict = null;
+
+    if (!this.settings.installedPacks) this.settings.installedPacks = {};
+    this.settings.installedPacks[sid] = {
+      hash: packInfo.hash || '',
+      zipBytes: packInfo.zipBytes || u8.length,
+      rawBytes: packInfo.rawBytes || 0,
+      fileCount: writtenCount,
+      installedAt: new Date().toISOString(),
+      storage: isMobile ? 'vault' : (rootDir || 'vault'),
+    };
+    await this.saveSettings();
+    return { sid, writtenCount };
+  }
+
+  async uninstallPack(sid) {
+    const isMobile = !!(Platform && Platform.isMobile) || typeof require !== 'function';
+    if (!isMobile) {
+      const rootDir = this._getPackStorageRoot();
+      if (rootDir) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const packDir = path.join(rootDir, 'packs', sid);
+          if (fs.existsSync(packDir)) {
+            fs.rmSync(packDir, { recursive: true, force: true });
+          }
+        } catch (e) {
+          console.warn('[주석 찾기] PC 팩 폴더 삭제 실패:', sid, e);
+        }
+      }
+    }
+    const vaultPackDir = `${this.manifest.dir}/data/packs/${sid}`;
+    try {
+      if (await this.app.vault.adapter.exists(vaultPackDir)) {
+        const listed = await this.app.vault.adapter.list(vaultPackDir);
+        const files = (listed && listed.files) ? listed.files : [];
+        for (const f of files) {
+          try { await this.app.vault.adapter.remove(f); } catch (_) {}
+        }
+        if (typeof this.app.vault.adapter.rmdir === 'function') {
+          try { await this.app.vault.adapter.rmdir(vaultPackDir, true); } catch (_) {}
+        }
+      }
+    } catch (e) {
+      console.warn('[주석 찾기] 보관함 팩 삭제 실패:', sid, e);
+    }
+
+    if (this.settings.installedPacks) {
+      delete this.settings.installedPacks[sid];
+    }
+    this._packBookCache.clear();
+    this._chapterCache.clear();
+    this._bookCache.clear();
+    if (sid === 'bible-dict') this._bibleDict = null;
+    await this.saveSettings();
+    return true;
+  }
+
+  async _loadPackBookData(sid, bStr) {
+    const key = `${sid}:${bStr}`;
+    if (this._packBookCache.has(key)) {
+      const hit = this._packBookCache.get(key);
+      this._packBookCache.delete(key);
+      this._packBookCache.set(key, hit);
+      return hit;
+    }
+    let data = null;
+    if (!(Platform && Platform.isMobile) && typeof require === 'function') {
+      const rootDir = this._getPackStorageRoot();
+      if (rootDir) {
+        try {
+          const fs = require('fs');
+          const path = require('path');
+          const full = path.join(rootDir, 'packs', sid, `b${bStr}.json`);
+          if (fs.existsSync(full)) {
+            data = JSON.parse(fs.readFileSync(full, 'utf8'));
+          }
+        } catch (_) {}
+      }
+    }
+    if (!data) {
+      const rel = `${this.manifest.dir}/data/packs/${sid}/b${bStr}.json`;
+      try {
+        if (await this.app.vault.adapter.exists(rel)) {
+          data = JSON.parse(await this.app.vault.adapter.read(rel));
+        }
+      } catch (_) {}
+    }
+    if (data) {
+      if (this._packBookCache.size >= 8) {
+        const oldest = this._packBookCache.keys().next().value;
+        this._packBookCache.delete(oldest);
+      }
+      this._packBookCache.set(key, data);
+    }
+    return data;
+  }
+
+  _getPackableSourcesForChapter(b, chNum) {
+    if (!this.index || !Array.isArray(this.index.files)) return null;
+    const entries = [];
+    if (this.lookup && typeof this.lookup.get === 'function') {
+      const chList = this.lookup.get(`${b}:${chNum}`);
+      if (Array.isArray(chList)) entries.push(...chList);
+      if (chNum !== 0) {
+        const ch0List = this.lookup.get(`${b}:0`);
+        if (Array.isArray(ch0List)) entries.push(...ch0List);
+      }
+    }
+    const sids = new Set();
+    for (const e of entries) {
+      const fInfo = this.index.files[e[4]];
+      const sid = fInfo && fInfo[0];
+      if (sid && PACKABLE_COMMENTARY_IDS.has(sid)) sids.add(sid);
+    }
+    return sids;
+  }
+
+  _mergeBookFields(target, src, overwrite = false) {
+    if (!src || typeof src !== 'object') return;
+    if (src.pages) {
+      for (const [k, v] of Object.entries(src.pages)) {
+        if (overwrite || !(k in target.pages)) target.pages[k] = v;
+      }
+    }
+    if (src.corrected) {
+      for (const [k, v] of Object.entries(src.corrected)) {
+        if (overwrite || !(k in target.corrected)) target.corrected[k] = v;
+      }
+    }
+  }
+
   async syncRemoteManifestSilent() {
     try {
       const { data: remote, rawText } = await this.fetchRawJson('chapters_manifest.json', 10000);
@@ -3417,6 +3929,84 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     const localChapterPath = `${this.manifest.dir}/data/chapters/b${bStr}-${chNum}.json`;
     const localLegacyPath = `${this.manifest.dir}/data/b${bStr}.json`;
     const isMobile = !!(Platform && Platform.isMobile);
+
+    const installedCommentaries = Object.keys(this.settings?.installedPacks || {})
+      .filter((sid) => PACKABLE_COMMENTARY_IDS.has(sid));
+    const hasInstalledPacks = installedCommentaries.length > 0;
+    const packsOnly = Boolean(this.settings?.installedPacksOnly);
+
+    if (hasInstalledPacks || packsOnly) {
+      const merged = { b, pages: {}, corrected: {}, _fromPacks: true };
+      const neededSources = this._getPackableSourcesForChapter(b, chNum);
+      const targetSids = (neededSources && neededSources.size > 0)
+        ? installedCommentaries.filter((sid) => neededSources.has(sid))
+        : installedCommentaries;
+
+      for (const sid of targetSids) {
+        const packBook = await this._loadPackBookData(sid, bStr);
+        if (packBook) this._mergeBookFields(merged, packBook, true);
+      }
+
+      const installedSet = new Set(installedCommentaries);
+      const allCoveredByPacks = Boolean(
+        neededSources && neededSources.size > 0 && [...neededSources].every((sid) => installedSet.has(sid))
+      );
+
+      let localChData = null;
+      try {
+        if (await this.app.vault.adapter.exists(localChapterPath)) {
+          localChData = JSON.parse(await this.app.vault.adapter.read(localChapterPath));
+        }
+      } catch (_) {}
+
+      const missingSources = !allCoveredByPacks && !packsOnly;
+      if (missingSources) {
+        let fallbackData = null;
+        if (!isMobile) {
+          try { fallbackData = await this.loadBookData(b); } catch (_) {}
+        }
+        if (!fallbackData && !isStale && localChData) {
+          fallbackData = localChData;
+        }
+        if (!fallbackData) {
+          const remoteRel = (manifestEntry && manifestEntry.f) ? manifestEntry.f : `chapters/b${bStr}-${chNum}.json`;
+          try {
+            const { data, rawText } = await this.fetchRawJson(remoteRel, 25000);
+            if (data) {
+              fallbackData = data;
+              await this.ensureVaultDir(`${this.manifest.dir}/data/chapters`);
+              await this.app.vault.adapter.write(localChapterPath, rawText || JSON.stringify(data));
+              if (expectedHash) {
+                if (!this.settings.chapterHashes) this.settings.chapterHashes = {};
+                this.settings.chapterHashes[cacheKey] = expectedHash;
+                await this.saveSettings();
+              }
+            }
+          } catch (_) {
+            if (localChData) fallbackData = localChData;
+            else if (isMobile && await this.app.vault.adapter.exists(localLegacyPath)) {
+              fallbackData = await this.loadBookData(b);
+            }
+          }
+        }
+        if (fallbackData) {
+          this._mergeBookFields(merged, fallbackData, false);
+        }
+      }
+
+      if (localChData && localChData._userCorrected && localChData.corrected) {
+        if (!merged._userCorrected) merged._userCorrected = {};
+        for (const [uk, isUsr] of Object.entries(localChData._userCorrected)) {
+          if (isUsr && uk in localChData.corrected) {
+            merged.corrected[uk] = localChData.corrected[uk];
+            merged._userCorrected[uk] = true;
+          }
+        }
+      }
+
+      this._setChapterCache(cacheKey, merged);
+      return merged;
+    }
 
     // 1. 로컬 장 캐시 파일 확인 (최신 해시와 일치하거나 매니페스트 없을 때)
     if (!isStale) {
@@ -3750,9 +4340,11 @@ ${ocrText}`;
       : await this.loadBookData(b);
     if (!targetData) return;
     if (!targetData.corrected) targetData.corrected = {};
+    if (!targetData._userCorrected) targetData._userCorrected = {};
     targetData.corrected[key] = text;
+    targetData._userCorrected[key] = true;
     try {
-      if (!targetData._isChapterOnly && await this.app.vault.adapter.exists(legacyPath)) {
+      if (!targetData._isChapterOnly && !targetData._fromPacks && await this.app.vault.adapter.exists(legacyPath)) {
         await this.app.vault.adapter.write(legacyPath, JSON.stringify(targetData));
       } else if (ch !== null && ch !== undefined) {
         await this.ensureVaultDir(`${this.manifest.dir}/data/chapters`);
@@ -4018,12 +4610,33 @@ ${ocrText}`;
   }
   async loadBibleDictionary() {
     if (this._bibleDict) return this._bibleDict;
+    const packRelPath = `${this.manifest.dir}/data/packs/bible-dict/bible-dict.json`;
     const relPath = `${this.manifest.dir}/data/bible-dict.json`;
+    // 0. Desktop 선택 다운로드 팩(보관함 외부) 확인
+    if (!(Platform && Platform.isMobile) && typeof require === 'function') {
+      try {
+        const rootDir = this._getPackStorageRoot();
+        if (rootDir) {
+          const fs = require('fs');
+          const path = require('path');
+          const packDictPath = path.join(rootDir, 'packs', 'bible-dict', 'bible-dict.json');
+          if (fs.existsSync(packDictPath)) {
+            this._bibleDict = JSON.parse(fs.readFileSync(packDictPath, 'utf8'));
+            return this._bibleDict;
+          }
+        }
+      } catch (err) {
+        console.warn('[loadBibleDictionary pack fs 실패]', err);
+      }
+    }
+    // 1. 보관함 내 선택 다운로드 팩(모바일) 또는 기존 로컬 bible-dict.json 확인
     try {
-      if (await this.app.vault.adapter.exists(relPath)) {
-        const raw = await this.app.vault.adapter.read(relPath);
-        this._bibleDict = JSON.parse(raw);
-        return this._bibleDict;
+      for (const candidateRel of [packRelPath, relPath]) {
+        if (await this.app.vault.adapter.exists(candidateRel)) {
+          const raw = await this.app.vault.adapter.read(candidateRel);
+          this._bibleDict = JSON.parse(raw);
+          return this._bibleDict;
+        }
       }
     } catch (err) {
       console.warn('[loadBibleDictionary adapter 실패, fallback 시도]', err);
@@ -4048,6 +4661,9 @@ ${ocrText}`;
         }
       }
     } catch (e) {}
+    if (this.settings && this.settings.installedPacksOnly) {
+      return { total: 0, entries: [] };
+    }
     // BRAT / 모바일 환경: 원격 데이터 저장소에서 성경사전 온디맨드 다운로드
     try {
       new Notice('성경대사전(약 10MB)을 내려받는 중입니다...');

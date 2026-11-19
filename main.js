@@ -172,16 +172,28 @@ async function extractZipEntryBytes(u8, entry) {
  * "요 3:16", "요한복음 3장 16절", "골 3 5", "골 3 5-11", "롬 8", "골" 등을 폭넓게 해석한다.
  * @returns {{b:number, ch:number, v1:number, v2:number}|null}  (v1=0이면 장 전체)
  */
+function normalizeCommentaryTextFixes(text) {
+  let s = String(text || '');
+  if (!s) return s;
+  if (s.includes('아리스다교')) {
+    s = s.replace(/아리스다교/g, '아리스다고');
+  }
+  s = s.replace(/(\d{1,3})\s*[:：]\s*(\d{1,3})\s*(?:\\?[_＿])\s*(\d{1,3})/g, '$1:$2-$3');
+  s = s.replace(/([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?\s*\d{1,3}\s*[장편.]\s*\d{1,3})\s*(?:\\?[_＿])\s*(\d{1,3})/g, '$1-$2');
+  s = s.replace(/\((\d{1,3})\s*(?:\\?[_＿])\s*(\d{1,3}\s*절)\)/g, '($1-$2)');
+  return s;
+}
+
 function parseRef(input) {
   if (!input) return null;
   let s = String(input).replace(/[\[\](){}<>.,·:;]/g, ' ').trim();
-  const raw = String(input).trim();
+  const raw = normalizeCommentaryTextFixes(String(input).trim());
 
-  // 1. 콜론 / 장 / 편 / 마침표 구분: "골 3:5", "골 3:5-11", "골 3장 5절", "골 3.5"
-  let m = raw.match(/([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?)\s*(\d{1,3})\s*[:：장편.]\s*(\d{1,3})?\s*절?(?:\s*[-~–]\s*(\d{1,3})\s*절?)?/);
+  // 1. 콜론 / 장 / 편 / 마침표 구분: "골 3:5", "골 3:5-11", "골 3장 5절", "골 3.5", "행 18:1_4"
+  let m = raw.match(/([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?)\s*(\d{1,3})\s*[:：장편.]\s*(\d{1,3})?\s*절?(?:\s*[-~–_＿]\s*(\d{1,3})\s*절?)?/);
   if (!m) {
     // 2. 공백 구분 2개 숫자: "골 3 5", "골 3 5-11"
-    m = raw.match(/([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?)\s*(\d{1,3})\s+(\d{1,3})\s*절?(?:\s*[-~–]\s*(\d{1,3})\s*절?)?/);
+    m = raw.match(/([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?)\s*(\d{1,3})\s+(\d{1,3})\s*절?(?:\s*[-~–_＿]\s*(\d{1,3})\s*절?)?/);
   }
   if (!m) {
     // 3. 단일 장 숫자: "골 3", "골 3장", "시 23편"
@@ -217,9 +229,11 @@ function parseRef(input) {
  */
 function parseMultiRef(input) {
   if (!input) return null;
-  let clean = String(input).trim().replace(/(\d+)\s*[:：]\s*(\d+)\s+(\d+)/g, '$1:$2$3').replace(/(\d+)\s+(\d+)/g, '$1$2');
+  let clean = normalizeCommentaryTextFixes(String(input).trim())
+    .replace(/(\d+)\s*[:：]\s*(\d+)\s+(\d+)/g, '$1:$2$3')
+    .replace(/(\d+)\s+(\d+)/g, '$1$2');
 
-  const m = clean.match(/^([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?)\s*(\d{1,3})\s*[:：장편.]\s*(\d{1,3})?(?:\s*[-~–]\s*(\d{1,3}))?(.*)$/);
+  const m = clean.match(/^([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?)\s*(\d{1,3})\s*[:：장편.]\s*(\d{1,3})?(?:\s*[-~–_＿]\s*(\d{1,3}))?(.*)$/);
   if (!m) {
     const single = parseRef(clean);
     if (!single) return null;
@@ -256,7 +270,7 @@ function parseMultiRef(input) {
     for (const part of parts) {
       const p = part.trim();
       if (!p) continue;
-      const chVMatch = p.match(/^(\d{1,3})\s*[:：]\s*(\d{1,3})(?:\s*[-~–]\s*(\d{1,3}))?/);
+      const chVMatch = p.match(/^(\d{1,3})\s*[:：]\s*(\d{1,3})(?:\s*[-~–_＿]\s*(\d{1,3}))?/);
       if (chVMatch) {
         currentCh = parseInt(chVMatch[1], 10);
         const pv1 = parseInt(chVMatch[2], 10);
@@ -264,7 +278,7 @@ function parseMultiRef(input) {
         if (pv2 < pv1) pv2 = pv1;
         segments.push({ ch: currentCh, v1: pv1, v2: pv2 });
       } else {
-        const vMatch = p.match(/^(\d{1,3})(?:\s*[-~–]\s*(\d{1,3}))?/);
+        const vMatch = p.match(/^(\d{1,3})(?:\s*[-~–_＿]\s*(\d{1,3}))?/);
         if (vMatch) {
           const pv1 = parseInt(vMatch[1], 10);
           let pv2 = vMatch[2] ? parseInt(vMatch[2], 10) : pv1;
@@ -552,8 +566,8 @@ function linkifyVerseRefsInDOM(targetContainer, plugin, ctxBook = 0, ctxCh = 0) 
     return list;
   };
 
-  // Pass 1: 책 이름 + 장:절 표기 (예: 창세기 1:16, 시편 19:1, 히브리서 5:4, 사도행전 20장 7절)
-  const explicitRe = /([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?\s*\d{1,3}\s*[:：장편.]\s*\d{1,3}(?:\s*[-~–]\s*\d{1,3})?(?:\s*,\s*(?:\d{1,3}\s*[:：]\s*)?\d{1,3}(?:\s*[-~–]\s*\d{1,3})?)*(?:\s*절)?)/g;
+  // Pass 1: 책 이름 + 장:절 표기 (예: 창세기 1:16, 시편 19:1, 히브리서 5:4, 사도행전 20장 7절, 행 18:1_4)
+  const explicitRe = /([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?\s*\d{1,3}\s*[:：장편.]\s*\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?(?:\s*,\s*(?:\d{1,3}\s*[:：]\s*)?\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?)*(?:\s*절)?)/g;
   for (const tNode of collectTextNodes()) {
     const text = tNode.nodeValue;
     explicitRe.lastIndex = 0;
@@ -597,7 +611,7 @@ function linkifyVerseRefsInDOM(targetContainer, plugin, ctxBook = 0, ctxCh = 0) 
   // Pass 2: 현재 장 문맥 내 괄호 절 표기 (예: (1절), (7-10절))
   if (ctxBook > 0 && ctxCh > 0 && BOOK_SHORT[ctxBook]) {
     const shortBk = BOOK_SHORT[ctxBook];
-    const relRe = /\((\d{1,3}(?:\s*[-~–]\s*\d{1,3})?\s*절)\)/g;
+    const relRe = /\((\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?\s*절)\)/g;
     for (const tNode of collectTextNodes()) {
       const text = tNode.nodeValue;
       relRe.lastIndex = 0;
@@ -608,7 +622,7 @@ function linkifyVerseRefsInDOM(targetContainer, plugin, ctxBook = 0, ctxCh = 0) 
 
       while ((m = relRe.exec(text)) !== null) {
         const inner = m[1];
-        const vRange = inner.replace(/\s*절$/, '').replace(/\s+/g, '');
+        const vRange = inner.replace(/\s*절$/, '').replace(/\s+/g, '').replace(/[_＿]/g, '-');
         const v1 = parseInt(vRange.split(/[-~–]/)[0], 10);
         if (!v1 || v1 < 1 || v1 > 176) continue;
 
@@ -693,7 +707,7 @@ function applyCrossRefLinksSafe(htmlOrMd) {
 }
 
 function formatStructuredGrandText(text) {
-  let res = text;
+  let res = normalizeCommentaryTextFixes(text);
   // 0. 관주 등 본문 내 <한글> 꺾쇠가 HTML 태그로 삼켜지지 않도록 전각 〈한글〉로 정규화 & 테이블 중복 태그 정리
   res = res.replace(/<([가-힣][^>\n<]{0,24})>/g, '〈$1〉');
   res = res.replace(/<\/tbody>\s*<\/tbody>/gi, '</tbody>');
@@ -795,7 +809,7 @@ function formatCommentaryText(text) {
     return formatStructuredGrandText(text);
   }
 
-  let res = text;
+  let res = normalizeCommentaryTextFixes(text);
 
   // 0. 각 장/편의 시작 제목을 제목답게 크게 (Hero Chapter Title - PDF 원본처럼 대형 볼드 표제)
   res = res.replace(/(?:^|\n)(?:[#\s]*)(?:\[\d+쪽\]\s*)?제\s*(\d{1,3})\s*([장편])\s+([^\n]+)/i, (match, chNum, chUnit, chTitle) => {
@@ -2445,7 +2459,8 @@ class BibleDictionaryView extends ItemView {
           if (!para) return;
         }
 
-        // 2. 숫자 사이의 비정상 공백 수정 (예: 창 11:3 1 -> 창 11:31)
+        // 2. 숫자 사이의 비정상 공백 수정 (예: 창 11:3 1 -> 창 11:31) 및 절_절 -> 절-절 정규화
+        para = normalizeCommentaryTextFixes(para);
         para = para.replace(/(\d+)\s*[:：]\s*(\d+)\s+(\d+)/g, '$1:$2$3');
         // 쉼표 앞뒤 공백 정돈 (예: 대상 15:16 ,27 -> 대상 15:16, 27)
         para = para.replace(/(\d+)\s*,\s*(\d+)/g, '$1, $2');
@@ -2453,7 +2468,7 @@ class BibleDictionaryView extends ItemView {
         const pEl = pContainer.createEl('p');
 
         // 3. 성경 장절 정규식 (쉼표로 연결된 추가 절 및 범위 완벽 지원: 대상 15:16, 27, 대하 5:12, 13, 대상 6:33, 15:17 등)
-        const refRegex = /([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?\s*\d{1,3}\s*[:：장편.]\s*\d{1,3}(?:\s*[-~–]\s*\d{1,3})?(?:\s*,\s*(?:\d{1,3}\s*[:：]\s*)?\d{1,3}(?:\s*[-~–]\s*\d{1,3})?)*)/g;
+        const refRegex = /([1-3]?\s*[가-힣]{1,8}(?:\s*[1-3]서)?\s*\d{1,3}\s*[:：장편.]\s*\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?(?:\s*,\s*(?:\d{1,3}\s*[:：]\s*)?\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?)*)/g;
         let lastIdx = 0;
         let match;
         while ((match = refRegex.exec(para)) !== null) {

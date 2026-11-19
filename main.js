@@ -3080,8 +3080,9 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
       // 1. 역본 비교 화면 주입
       const compRows = document.querySelectorAll('.bible-compare-row2');
       compRows.forEach((row) => {
-        if (!row.querySelector('.scf-injected-group')) {
-          const grp = row.createDiv({ cls: 'scf-injected-group' });
+        let grp = row.querySelector('.scf-injected-group');
+        if (!grp) {
+          grp = row.createDiv({ cls: 'scf-injected-group' });
           grp.style.cssText = 'display: inline-flex; gap: 4px; align-items: center; margin-left: 2px;';
 
           const btn = grp.createEl('button', {
@@ -3109,6 +3110,13 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
             const q = input?.value?.trim() || '';
             await this.openSideBySide(q);
           };
+        }
+
+        // 원어(스트롱) 버튼 바로 우측으로 배치 유지
+        const strongBtn = row.querySelector('.bible-compare-strong-btn') ||
+          Array.from(row.children).find((el) => el.tagName === 'BUTTON' && (el.textContent || '').includes('원어'));
+        if (strongBtn && strongBtn.nextElementSibling !== grp && typeof strongBtn.insertAdjacentElement === 'function') {
+          strongBtn.insertAdjacentElement('afterend', grp);
         }
 
         // 건수 배지 실시간 업데이트

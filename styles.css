@@ -357,10 +357,10 @@
   display: block;
 }
 .scf-fulltext {
-  font-family: "Pretendard", "Freesentation", var(--font-interface), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif !important;
+  font-family: var(--scf-serif, "KoPubWorldBatang", "Noto Serif KR", "RIDIBatang", "Nanum Myeongjo", "Batang", Georgia, serif) !important;
   font-size: var(--scf-font-size, 15px) !important;
-  line-height: 1.82 !important;
-  letter-spacing: -0.015em;
+  line-height: 1.88 !important;
+  letter-spacing: -0.01em;
   color: var(--text-normal);
   word-break: break-word;
   margin: 0;
@@ -373,13 +373,15 @@
   -webkit-user-select: text !important;
   cursor: text;
 }
-.scf-fulltext p {
+.scf-fulltext p,
+.scf-fulltext li {
+  font-family: var(--scf-serif, "KoPubWorldBatang", "Noto Serif KR", "RIDIBatang", "Nanum Myeongjo", "Batang", Georgia, serif) !important;
   font-size: var(--scf-font-size, 15px) !important;
-  line-height: 1.82 !important;
+  line-height: 1.88 !important;
   margin-bottom: 0.85em;
 }
 .scf-fulltext h1 {
-  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: var(--scf-gothic, "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif) !important;
   font-size: calc(var(--scf-font-size, 15px) * 1.42) !important;
   font-weight: 800 !important;
   color: var(--text-normal) !important;
@@ -389,7 +391,7 @@
   line-height: 1.38 !important;
 }
 .scf-fulltext h2 {
-  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: var(--scf-gothic, "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif) !important;
   font-size: calc(var(--scf-font-size, 15px) * 1.28) !important;
   font-weight: 800 !important;
   color: var(--interactive-accent, #2563eb) !important;
@@ -401,7 +403,7 @@
   line-height: 1.4 !important;
 }
 .scf-fulltext h3 {
-  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: var(--scf-gothic, "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif) !important;
   font-size: calc(var(--scf-font-size, 15px) * 1.18) !important;
   font-weight: 800 !important;
   color: var(--text-normal) !important;
@@ -410,7 +412,7 @@
 }
 .scf-fulltext h4,
 .scf-fulltext strong.scf-heading {
-  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+  font-family: var(--scf-gothic, "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif) !important;
   font-size: calc(var(--scf-font-size, 15px) * 1.07) !important;
   font-weight: 700 !important;
   color: var(--text-accent, #2563eb) !important;
@@ -418,8 +420,9 @@
   margin: 1.05em 0 0.4em !important;
   line-height: 1.45 !important;
 }
-.scf-fulltext p strong {
-  font-family: "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+.scf-fulltext p strong,
+.scf-fulltext li strong {
+  font-family: var(--scf-gothic, "Pretendard", "Freesentation", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif) !important;
   font-weight: 700 !important;
   color: var(--text-normal) !important;
 }
@@ -2111,12 +2114,22 @@ button.scf-list-item,
   font-family: var(--scf-gothic) !important;
   font-weight: 800 !important;
   font-size: calc(var(--scf-font-size, 15px) * 0.92) !important;
-  color: #ffffff !important;
-  background: var(--scf-verse-color) !important;
+  color: var(--scf-verse-color) !important;
+  background: var(--scf-h2-bg) !important;
+  border: 1.5px solid rgba(37, 99, 235, 0.35) !important;
   padding: 1px 8px !important;
   border-radius: 4px !important;
   margin-right: 7px !important;
   vertical-align: baseline !important;
+}
+.scf-qt-badge .scf-dict-verse-link {
+  color: var(--scf-verse-color) !important;
+  background: transparent !important;
+  text-decoration: none !important;
+  font-weight: 800 !important;
+}
+.scf-qt-badge:hover {
+  background: rgba(37, 99, 235, 0.18) !important;
 }
 .scf-qt-refs {
   font-family: var(--scf-gothic) !important;

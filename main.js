@@ -803,17 +803,21 @@ function formatStructuredGrandText(text) {
     return `\n\n<div class="scf-passage-box">\n  <div class="scf-passage-title">📌 ${cleanTitle}</div>\n  <div class="scf-passage-body">\n\n${cleanBody}\n\n</div>\n</div>\n\n`;
   });
 
-  // 5. 검은 음영 반전 배지 헤더 (단독 행은 일체형 블록 헤더로, 인라인은 뱃지로)
-  res = res.replace(/^(?:\*\*)?【\s*(도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강)\s*】([^\n]*)$/gm, (m, tag, tail) => {
+  // 5. 검은 음영 반전 배지 헤더 (단독 행은 일체형 블록 헤더로, 인라인은 뱃지로; 반드시 앞뒤 빈 줄을 두어 뒤따르는 #### 헤딩이 본문으로 삼켜지지 않게 함)
+  res = res.replace(/^(?:\*\*)?【\s*(도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강|풍습|과학|역사배경)\s*】([^\n]*)$/gm, (m, tag, tail) => {
     const t = tail.replace(/\*\*/g, '').replace(/\s+/g, ' ').trim().replace(/^[-–—:]\s*/, '');
     return t
-      ? `<div class="scf-badge-head"><span class="scf-pill-black">${tag}</span><span class="scf-badge-title">${t}</span></div>`
-      : `<div class="scf-badge-head"><span class="scf-pill-black">${tag}</span></div>`;
+      ? `\n\n<div class="scf-badge-head"><span class="scf-pill-black">${tag}</span><span class="scf-badge-title">${t}</span></div>\n\n`
+      : `\n\n<div class="scf-badge-head"><span class="scf-pill-black">${tag}</span></div>\n\n`;
   });
-  res = res.replace(/(?:\*\*)?【\s*(도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강)\s*】([^*<\n]*)(?:\*\*)?/g, (m, tag, tail) => {
+  res = res.replace(/(?:\*\*)?【\s*(도표|보감|원어연구|인물연구|주요주제|신학용어|고고학|배경|지명연구|특강|풍습|과학|역사배경)\s*】([^*<\n]*)(?:\*\*)?/g, (m, tag, tail) => {
     const t = tail.trim().replace(/^[-–—:]\s*/, '');
     return t ? `<span class="scf-pill-black">${tag}</span> **${t}**` : `<span class="scf-pill-black">${tag}</span>`;
   });
+  // 번호가 붙은 본문 문단이 잘못 #### 헤딩으로 들어온 경우 볼드 소제목+명조 본문으로 복원
+  res = res.replace(/^####\s+(\d+\.\s*[^:\n]{1,35}\s*[:：])[ \t]+(.+)$/gm, (_, lead, rest) => `\n\n**${lead.trim()}** ${rest.trim()}\n\n`);
+  res = res.replace(/^####\s+(?![•●])(\d+\.)[ \t]+([^\n]{45,})$/gm, (_, num, rest) => `\n\n**${num}** ${rest.trim()}\n\n`);
+  res = res.replace(/([^\n])\n(#{1,4}\s+)/g, '$1\n\n$2');
 
   // 6. 핵심 성구 관주 2열 정렬 행 (`신 4:29  그러나 네가...`) & 강조 키워드 `〈...〉`
   if (/##\s*핵심\s*성구\s*관주/.test(res)) {
@@ -887,6 +891,21 @@ function formatCommentaryText(text) {
   res = res.replace(/(?:^|\n)[ \t]*(?:【\s*성경\s*본문\s*】|외울\s*말씀)(.*?)(?=\n\n|\n[【\[]|$)/gs, '\n\n> [!quote] **【성경 본문】**\n> $1\n\n');
   // 4. 【박스】 또는 연구자료 / 단어사전 / 인물연구 등 박스 기사는 옵시디언 콜아웃 박스로 격리
   res = res.replace(/(?:^|\n)[ \t]*(?:【\s*(?:박스|연구자료|특강|배경|인물연구)\s*】|\[\s*(?:박스|연구자료|특강|배경|인물연구)\s*\])(.*?)(?=\n\n|\n[【\[]|$)/gs, '\n\n> [!note] $1\n\n');
+
+  // 4-1. 호크마 주석 상단 메타(성경 / 주제1 / 주제2) 및 어구 표제(▸ 단어 - 설명), 스펄전 시편강해 절 표제(2절. “...”)를 그랜드종합주석 서식으로 통일
+  res = res.replace(
+    /^\*\*성\s*경\s*:\s*\[([^\]]+)\]\*\*\s*(?:\n+\*\*주제1\s*:\s*\[([^\]]*)\]\*\*)?\s*(?:\n+\*\*주제2\s*:\s*\[([^\]]*)\]\*\*)?/gm,
+    (_, ref, t1, t2) => {
+      const chips = [`<span class="scf-meta-chip"><span class="scf-meta-k">성경</span><span class="scf-meta-v">${ref.trim()}</span></span>`];
+      if (t1 && t1.trim()) chips.push(`<span class="scf-meta-chip"><span class="scf-meta-k">주제 1</span><span class="scf-meta-v">${t1.trim()}</span></span>`);
+      if (t2 && t2.trim()) chips.push(`<span class="scf-meta-chip"><span class="scf-meta-k">주제 2</span><span class="scf-meta-v">${t2.trim()}</span></span>`);
+      const mainTitle = (t2 && t2.trim()) || (t1 && t1.trim()) || ref.trim();
+      return `\n\n<div class="scf-verse-head">${ref.trim()} — ${mainTitle}</div>\n\n<div class="scf-sermon-meta">${chips.join('')}</div>\n\n`;
+    }
+  );
+  res = res.replace(/^▸\s*([^\n]+?)\s+-\s+/gm, (_, term) => `**▸ ${term.trim()} —** `);
+  res = res.replace(/^(\d{1,3}절\.)\s*(“[^”\n]{1,90}”\.?)/gm, (_, vNum, quote) => `**${vNum} ${quote}**`);
+  res = res.replace(/^([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩ]+\.)\s+/gm, '**$1** ');
 
   // 5. 절별 강해주석 시작 표제어 (예: 3:5 땅에 있는 지체를 죽이라.) 고딕 볼드 + 볼드 파란색 적용
   const lines = res.split('\n');
@@ -1919,7 +1938,7 @@ class CommentaryView extends ItemView {
       const navIsMack = !!(navFile && navFile[0] === 'mackintosh');
       if (navIsMack) {
         formatMackintoshDOM(targetContainer);
-      } else if (targetContainer.querySelector('.scf-chapter-hero-title, .scf-verse-head, .scf-passage-box, .scf-badge-head, .scf-crossref-row, .scf-qt-item, .scf-maxim-row, h2')) {
+      } else {
         targetContainer.addClass('scf-grand-article');
       }
       targetContainer.querySelectorAll('h3').forEach((h3) => {

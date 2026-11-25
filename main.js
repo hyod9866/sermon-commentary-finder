@@ -653,6 +653,57 @@ function linkifyVerseRefsInDOM(targetContainer, plugin, ctxBook = 0, ctxCh = 0) 
       }
     }
   }
+
+  // Pass 3: 현재 책(ctxBook) 문맥 내 책 이름 생략 장:절 표기 (예: (23:7), (23:7-9), (23:7, 9), 23:7 참조 등)
+  if (ctxBook > 0 && BOOK_SHORT[ctxBook]) {
+    const shortBk = BOOK_SHORT[ctxBook];
+    const maxCh = MAX_CHAPTERS[ctxBook] || 150;
+    // 괄호 안이나 공백/줄바꿈/구두점 뒤에서 시작하는 "장:절" 패턴 (앞에 한글 성경책명이 오지 않는 경우만, Pass 1에서 이미 처리된 노드는 collectTextNodes에서 자동 제외됨)
+    const bareChVerseRe = /(?<![가-힣A-Za-z0-9:])(\d{1,3}\s*[:：]\s*\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?(?:\s*,\s*(?:\d{1,3}\s*[:：]\s*)?\d{1,3}(?:\s*[-~–_＿]\s*\d{1,3})?)*(?:\s*절)?)(?![:\d])/g;
+    for (const tNode of collectTextNodes()) {
+      const text = tNode.nodeValue;
+      bareChVerseRe.lastIndex = 0;
+      let lastIdx = 0;
+      let m;
+      const frag = document.createDocumentFragment();
+      let changed = false;
+
+      while ((m = bareChVerseRe.exec(text)) !== null) {
+        const bareStr = m[1];
+        const firstParts = bareStr.match(/^(\d{1,3})\s*[:：]\s*(\d{1,3})/);
+        if (!firstParts) continue;
+        const chNum = parseInt(firstParts[1], 10);
+        const vNum = parseInt(firstParts[2], 10);
+        if (!chNum || chNum < 1 || chNum > maxCh || !vNum || vNum < 1 || vNum > 176) continue;
+
+        const targetRef = `${shortBk} ${bareStr.replace(/[_＿]/g, '-')}`;
+        const parsed = parseMultiRef(targetRef) || parseRef(targetRef);
+        if (!parsed || !parsed.b) continue;
+
+        if (m.index > lastIdx) {
+          frag.appendChild(document.createTextNode(text.slice(lastIdx, m.index)));
+        }
+        const link = document.createElement('span');
+        link.className = 'scf-dict-verse-link';
+        link.textContent = bareStr;
+        link.title = `클릭 시 성경 본문 보기: ${parsed.label || targetRef}`;
+        link.onclick = async (evt) => {
+          evt.stopPropagation();
+          await plugin.showVersePopover(targetRef, link);
+        };
+        frag.appendChild(link);
+        lastIdx = m.index + m[0].length;
+        changed = true;
+      }
+
+      if (changed) {
+        if (lastIdx < text.length) {
+          frag.appendChild(document.createTextNode(text.slice(lastIdx)));
+        }
+        tNode.parentNode.replaceChild(frag, tNode);
+      }
+    }
+  }
 }
 
 function formatEntryLabel(e, idx, plugin, includeTag = false) {
@@ -3048,7 +3099,10 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     this.registerInterval(window.setInterval(() => {
       this.followBibleFinder();
       this.injectButtonsIntoBibleFinder();
-    }, 600));
+    }, 1000));
+    this.registerEvent(this.app.workspace.on('layout-change', () => {
+      this.injectButtonsIntoBibleFinder();
+    }));
 
     // Alt+D 단축키로 주석/성경사전 검색창 포커스
     this.registerDomEvent(window, 'keydown', (e) => {
@@ -3134,11 +3188,12 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
           strongBtn.insertAdjacentElement('afterend', grp);
         }
 
-        // 건수 배지 실시간 업데이트
+        // 건수 배지 실시간 업데이트 (검색어가 바뀌었을 때만 재계산)
         const input = row.closest('.bible-compare-container')?.querySelector('.bible-compare-search-input');
         const q = input?.value?.trim() || '';
         const btn = row.querySelector('.scf-injected-btn');
-        if (btn) {
+        if (btn && btn._lastQuery !== q) {
+          btn._lastQuery = q;
           const cnt = this.getCommentaryCount(q);
           btn.textContent = cnt > 0 ? `📚 주석 (${cnt})` : '📚 주석';
           btn.style.opacity = cnt > 0 ? '1' : '0.65';
@@ -3182,7 +3237,8 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
         const input = leftBtns.closest('.strong-bible-header')?.querySelector('.strong-bible-search-input');
         const q = input?.value?.trim() || '';
         const btn = leftBtns.querySelector('.scf-injected-btn');
-        if (btn) {
+        if (btn && btn._lastQuery !== q) {
+          btn._lastQuery = q;
           const cnt = this.getCommentaryCount(q);
           btn.textContent = cnt > 0 ? `📚 주석 (${cnt})` : '📚 주석';
           btn.style.opacity = cnt > 0 ? '1' : '0.65';

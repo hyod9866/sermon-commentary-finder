@@ -76,6 +76,9 @@ const DEFAULT_SETTINGS = {
   chapterHashes: {},
   installedPacks: {},         // 선택 설치한 주석 팩 상태 ({ [sid]: { hash, zipBytes, fileCount, installedAt, storage } })
   installedPacksOnly: false,  // true면 설치한 주석 팩만 사용 (미설치 주석의 GitHub 자동 조회 끄기)
+  studyNotesRepo: 'hyod9866/sermon-study-notes', // 02~04 성경연구 노트 동기화 저장소
+  autoSyncStudyNotes: true,   // 시작 시 신규/수정 연구노트 자동 동기화
+  studyNotesHashes: {},       // 동기화된 연구노트 sha256 캐시
 };
 
 const PACK_DEFS = [
@@ -2933,6 +2936,29 @@ class CommentarySettingTab extends PluginSettingTab {
       this.plugin.fetchPacksManifest(false).then(() => renderPackRows()).catch(() => {});
     }
 
+    containerEl.createEl('h3', { text: '성경연구 노트 동기화 (02 성경 연구 ~ 04 신약)' });
+    new Setting(containerEl)
+      .setName('연구노트 자동 동기화')
+      .setDesc('옵시디언 시작 시 주간 업데이트된 연구노트(.md)를 자동으로 내려받습니다.')
+      .addToggle((t) => t
+        .setValue(this.plugin.settings.autoSyncStudyNotes !== false)
+        .onChange(async (v) => {
+          this.plugin.settings.autoSyncStudyNotes = v;
+          await this.plugin.saveSettings();
+        }))
+      .addButton((b) => b
+        .setButtonText('지금 동기화')
+        .onClick(async () => {
+          b.setDisabled(true);
+          b.setButtonText('동기화 중...');
+          try {
+            await this.plugin.syncStudyNotesFromGitHub(false);
+          } finally {
+            b.setDisabled(false);
+            b.setButtonText('지금 동기화');
+          }
+        }));
+
     if (idx) {
       containerEl.createEl('h3', { text: '주석 폴더 위치' });
       containerEl.createEl('p', { text: '주석 폴더를 다른 곳으로 옮겼다면 새 경로를 적어 주세요. 비워 두면 색인을 만들 때의 경로를 씁니다.' })
@@ -2965,10 +2991,14 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
     this._packsManifestData = null;
     if (!this.settings.chapterHashes) this.settings.chapterHashes = {};
     if (!this.settings.installedPacks) this.settings.installedPacks = {};
+    if (!this.settings.studyNotesHashes) this.settings.studyNotesHashes = {};
     await this.loadLocalManifest();
     await this.loadLocalPacksManifest();
     await this.loadIndex();
     this.syncRemoteManifestSilent();
+    if (this.settings.autoSyncStudyNotes !== false) {
+      setTimeout(() => { this.syncStudyNotesFromGitHub(true).catch(() => {}); }, 4500);
+    }
     this._legacyCheckTimer = setTimeout(() => {
       this._legacyCheckTimer = null;
       this.checkAndWarnLegacyData();
@@ -3037,6 +3067,11 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
         const text = sel && sel.trim() ? sel : editor.getLine(editor.getCursor().line);
         this.findFor(text);
       },
+    });
+    this.addCommand({
+      id: 'sync-study-notes',
+      name: '연구노트(02 성경 연구 ~ 04 신약) 지금 동기화',
+      callback: () => this.syncStudyNotesFromGitHub(false),
     });
 
     // 편집기 활성 뷰 추적 (주석에서 "노트 삽입" 시 대상 에디터 자동 지정)
@@ -3776,6 +3811,89 @@ module.exports = class CommentaryFinderPlugin extends Plugin {
       await this.app.vault.adapter.write(`${this.manifest.dir}/data/packs_manifest.json`, rawText || JSON.stringify(manifest));
     } catch (_) {}
     return manifest;
+  }
+
+  async syncStudyNotesFromGitHub(silent = true) {
+    if (this._studyNotesSyncing) return;
+    this._studyNotesSyncing = true;
+    try {
+      const repo = (this.settings && this.settings.studyNotesRepo) || 'hyod9866/sermon-study-notes';
+      const manifestUrl = `https://raw.githubusercontent.com/${repo}/main/manifest.json`;
+      const reqPromise = requestUrl({ url: manifestUrl, method: 'GET' });
+      const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error('연구노트 목록 요청 시간 초과')), 12000));
+      const res = await Promise.race([reqPromise, timeoutPromise]);
+      if (!res || res.status < 200 || res.status >= 300) {
+        if (!silent) new Notice(`연구노트 동기화 실패 (HTTP ${res ? res.status : 'ERR'})`);
+        return;
+      }
+      const manifest = typeof res.json === 'object' && res.json ? res.json : JSON.parse(res.text);
+      const files = Array.isArray(manifest && manifest.files) ? manifest.files : [];
+      if (!files.length) {
+        if (!silent) new Notice('동기화할 연구노트 목록이 비어 있습니다.');
+        return;
+      }
+
+      if (!this.settings.studyNotesHashes) this.settings.studyNotesHashes = {};
+      const hashes = this.settings.studyNotesHashes;
+      const adapter = this.app.vault.adapter;
+      const toDownload = [];
+      let hashUpdated = false;
+
+      for (const f of files) {
+        if (!f || !f.path || !f.sha256) continue;
+        if (hashes[f.path] === f.sha256) {
+          if (await adapter.exists(f.path)) continue;
+        } else {
+          try {
+            const st = await adapter.stat(f.path);
+            if (st && st.type === 'file' && st.size === f.size) {
+              hashes[f.path] = f.sha256;
+              hashUpdated = true;
+              continue;
+            }
+          } catch (_) {}
+        }
+        toDownload.push(f);
+      }
+
+      let downloaded = 0;
+      const concurrency = 4;
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < toDownload.length) {
+          const item = toDownload[cursor++];
+          try {
+            const rawUrl = `https://raw.githubusercontent.com/${repo}/main/${encodeURI(item.path).replace(/#/g, '%23')}`;
+            const fileRes = await requestUrl({ url: rawUrl, method: 'GET' });
+            if (fileRes && fileRes.status >= 200 && fileRes.status < 300) {
+              const slashIdx = item.path.lastIndexOf('/');
+              if (slashIdx > 0) await this.ensureVaultDir(item.path.slice(0, slashIdx));
+              if (typeof fileRes.text === 'string') {
+                await adapter.write(item.path, fileRes.text);
+              } else if (fileRes.arrayBuffer) {
+                await adapter.writeBinary(item.path, fileRes.arrayBuffer);
+              }
+              hashes[item.path] = item.sha256;
+              hashUpdated = true;
+              downloaded++;
+            }
+          } catch (_) {}
+        }
+      };
+      if (toDownload.length > 0) {
+        await Promise.all(Array.from({ length: Math.min(concurrency, toDownload.length) }, () => worker()));
+      }
+      if (hashUpdated) await this.saveSettings();
+      if (downloaded > 0) {
+        new Notice(`📚 연구노트 ${downloaded}건 동기화 완료`, 5000);
+      } else if (!silent) {
+        new Notice('✓ 모든 연구노트가 이미 최신 상태입니다.', 3000);
+      }
+    } catch (err) {
+      if (!silent) new Notice(`❌ 연구노트 동기화 오류: ${err && err.message ? err.message : err}`);
+    } finally {
+      this._studyNotesSyncing = false;
+    }
   }
 
   async installPack(sid, onProgress = null) {

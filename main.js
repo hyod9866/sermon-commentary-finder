@@ -2309,7 +2309,28 @@ class BibleDictionaryView extends ItemView {
 
     this.searchEl.addEventListener('input', () => {
       this.searchQuery = this.searchEl.value.trim().toLowerCase();
-      this.renderList();
+      if (this.searchQuery && this.currentChosung !== '전체') {
+        this.currentChosung = '전체';
+        if (this.chosungBtns) {
+          Object.values(this.chosungBtns).forEach(b => b.removeClass('active'));
+          if (this.chosungBtns['전체']) this.chosungBtns['전체'].addClass('active');
+        }
+      }
+      this.renderAndSelectBest();
+    });
+    this.searchEl.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && !e.isComposing) {
+        e.preventDefault();
+        this.searchQuery = this.searchEl.value.trim().toLowerCase();
+        if (this.searchQuery && this.currentChosung !== '전체') {
+          this.currentChosung = '전체';
+          if (this.chosungBtns) {
+            Object.values(this.chosungBtns).forEach(b => b.removeClass('active'));
+            if (this.chosungBtns['전체']) this.chosungBtns['전체'].addClass('active');
+          }
+        }
+        this.renderAndSelectBest(true);
+      }
     });
 
     // 2. 옵션 바: 주석/스트롱코드와 100% 동일한 에디터 연동 체크박스 디자인 & 표제어 개수
@@ -2379,8 +2400,12 @@ class BibleDictionaryView extends ItemView {
     // 검색어 필터
     if (this.searchQuery) {
       const q = this.searchQuery;
+      const qNoSpace = q.replace(/\s+/g, '');
       list = list.filter(e => {
-        return (e.title && e.title.toLowerCase().includes(q)) ||
+        const t = e.title ? e.title.toLowerCase() : '';
+        const tNoSpace = t.replace(/\s+/g, '');
+        return t.includes(q) ||
+               (qNoSpace && tNoSpace.includes(qNoSpace)) ||
                (e.eng && e.eng.toLowerCase().includes(q)) ||
                (e.hanja && e.hanja.includes(q)) ||
                (e.content && e.content.toLowerCase().includes(q));
@@ -2604,9 +2629,43 @@ class BibleDictionaryView extends ItemView {
     this.plugin.closeVersePopover();
   }
 
-  searchAndSelect(term) {
+  pickBestMatch(filtered, query) {
+    if (!filtered || filtered.length === 0) return null;
+    const q = String(query || '').trim().toLowerCase();
+    if (!q) return filtered[0];
+    const qNoSpace = q.replace(/\s+/g, '');
+    return (
+      filtered.find(e => e.title && e.title.toLowerCase() === q) ||
+      filtered.find(e => e.title && e.title.toLowerCase().replace(/\s+/g, '') === qNoSpace) ||
+      filtered.find(e => e.title && e.title.toLowerCase().startsWith(q)) ||
+      filtered.find(e => e.title && e.title.toLowerCase().replace(/\s+/g, '').startsWith(qNoSpace)) ||
+      filtered.find(e => e.title && e.title.toLowerCase().includes(q)) ||
+      filtered[0]
+    );
+  }
+
+  renderAndSelectBest(scrollActive = false) {
+    const filtered = this.getFilteredEntries();
+    if (this.searchQuery && filtered.length > 0) {
+      const target = this.pickBestMatch(filtered, this.searchQuery);
+      this.selectedEntry = target;
+      this.renderList();
+      this.selectEntry(target);
+      if (scrollActive) {
+        const activeCard = this.listEl && this.listEl.querySelector('.scf-dict-item.active');
+        if (activeCard) activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    } else {
+      this.renderList();
+    }
+  }
+
+  async searchAndSelect(term) {
     if (!term || typeof term !== 'string') return;
-    const cleanTerm = term.trim().replace(/^[\[\(\{<"\'‘“]+|[\]\)\}>"\'’”.,·:;!?]+$/g, '');
+    if (!this.dictData || !this.dictData.entries || this.dictData.entries.length === 0) {
+      this.dictData = await this.plugin.loadBibleDictionary();
+    }
+    let cleanTerm = term.trim().replace(/^[\[\(\{<"\'‘“]+|[\]\)\}>"\'’”.,·:;!?]+$/g, '');
     if (!cleanTerm || cleanTerm.length < 2) return;
 
     if (this.searchEl) this.searchEl.value = cleanTerm;
@@ -2617,18 +2676,28 @@ class BibleDictionaryView extends ItemView {
       if (this.chosungBtns['전체']) this.chosungBtns['전체'].addClass('active');
     }
 
-    this.renderList();
+    let filtered = this.getFilteredEntries();
+    if (filtered.length === 0) {
+      const stripped = cleanTerm.replace(/(?:에서|에게|으로|까지|부터|[은는이가을를의에로와과도만])$/, '');
+      if (stripped && stripped.length >= 2 && stripped !== cleanTerm) {
+        cleanTerm = stripped;
+        if (this.searchEl) this.searchEl.value = cleanTerm;
+        this.searchQuery = cleanTerm.toLowerCase();
+        filtered = this.getFilteredEntries();
+      }
+    }
 
-    const filtered = this.getFilteredEntries();
     if (filtered.length > 0) {
-      const cleanNorm = cleanTerm.replace(/\s+/g, '');
-      const exact = filtered.find(e => e.title === cleanTerm || e.title.replace(/\s+/g, '') === cleanNorm);
-      const target = exact || filtered[0];
+      const target = this.pickBestMatch(filtered, cleanTerm);
+      this.selectedEntry = target;
+      this.renderList();
       this.selectEntry(target);
-      const activeCard = this.listEl.querySelector('.scf-dict-item.active');
+      const activeCard = this.listEl && this.listEl.querySelector('.scf-dict-item.active');
       if (activeCard) {
         activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
       }
+    } else {
+      this.renderList();
     }
   }
 
@@ -4877,10 +4946,7 @@ ${ocrText}`;
         }
       }
     } catch (e) {}
-    if (this.settings && this.settings.installedPacksOnly) {
-      return { total: 0, entries: [] };
-    }
-    // BRAT / 모바일 환경: 원격 데이터 저장소에서 성경사전 온디맨드 다운로드
+    // BRAT / 모바일 환경: 원격 데이터 저장소에서 성경사전 온디맨드 다운로드 (경량 모드에서도 사전 검색 가능하도록 허용)
     try {
       new Notice('성경대사전(약 10MB)을 내려받는 중입니다...');
       const { data, rawText } = await this.fetchRawJson('dictionaries/bible-dict.json', 45000);

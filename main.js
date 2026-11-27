@@ -2397,19 +2397,24 @@ class BibleDictionaryView extends ItemView {
       list = list.filter(e => e.chosung === this.currentChosung);
     }
 
-    // 검색어 필터
+    // 검색어 필터 (제목 정확 일치 > 제목 시작 > 제목/영문/한자 포함 > 본문 포함 순으로 우선 정렬)
     if (this.searchQuery) {
       const q = this.searchQuery;
       const qNoSpace = q.replace(/\s+/g, '');
-      list = list.filter(e => {
+      const scored = [];
+      for (const e of list) {
         const t = e.title ? e.title.toLowerCase() : '';
         const tNoSpace = t.replace(/\s+/g, '');
-        return t.includes(q) ||
-               (qNoSpace && tNoSpace.includes(qNoSpace)) ||
-               (e.eng && e.eng.toLowerCase().includes(q)) ||
-               (e.hanja && e.hanja.includes(q)) ||
-               (e.content && e.content.toLowerCase().includes(q));
-      });
+        let rank = 99;
+        if (t === q || (qNoSpace && tNoSpace === qNoSpace)) rank = 0;
+        else if (t.startsWith(q) || (qNoSpace && tNoSpace.startsWith(qNoSpace))) rank = 1;
+        else if (t.includes(q) || (qNoSpace && tNoSpace.includes(qNoSpace))) rank = 2;
+        else if ((e.eng && e.eng.toLowerCase().includes(q)) || (e.hanja && e.hanja.includes(q))) rank = 3;
+        else if (e.content && e.content.toLowerCase().includes(q)) rank = 4;
+        if (rank < 99) scored.push({ e, rank });
+      }
+      scored.sort((a, b) => a.rank - b.rank);
+      list = scored.map(x => x.e);
     }
 
     return list;
@@ -2644,7 +2649,7 @@ class BibleDictionaryView extends ItemView {
     );
   }
 
-  renderAndSelectBest(scrollActive = false) {
+  renderAndSelectBest(scrollActive = true) {
     const filtered = this.getFilteredEntries();
     if (this.searchQuery && filtered.length > 0) {
       const target = this.pickBestMatch(filtered, this.searchQuery);
@@ -2653,7 +2658,8 @@ class BibleDictionaryView extends ItemView {
       this.selectEntry(target);
       if (scrollActive) {
         const activeCard = this.listEl && this.listEl.querySelector('.scf-dict-item.active');
-        if (activeCard) activeCard.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        if (activeCard) activeCard.scrollIntoView({ block: 'nearest' });
+        else if (this.listEl) this.listEl.scrollTop = 0;
       }
     } else {
       this.renderList();
